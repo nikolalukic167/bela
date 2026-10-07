@@ -31,6 +31,15 @@ docs/rules/bela.md exact rules the engine implements
 
 Because engines are pure and serialisable, the same code can later run on a server for online multiplayer.
 
+## UI
+
+App chrome (menu, navbar, dialogs, buttons) uses [daisyUI](https://daisyui.com) 5 on Tailwind CSS 4, theme `forest`.
+Only the card-table layout in `src/styles.css` is custom CSS.
+
+## Online play
+
+See [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the phased plan.
+
 ## Hosting (GitHub Pages)
 
 `.github/workflows/deploy.yml` tests, builds and deploys on every push to `main`.

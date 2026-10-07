@@ -1,7 +1,7 @@
 import { useI18n } from '../../../i18n/i18n';
 
 const Points = ({ trump }: { trump: boolean }) => (
-  <table className="rules-table">
+  <table className="table table-sm w-auto">
     <tbody>
       {(trump
         ? [['J', 20], ['9', 14], ['A', 11], ['10', 10], ['K', 4], ['Q', 3], ['8', 0], ['7', 0]]
@@ -23,7 +23,7 @@ export function BelaRules() {
 
 function Hr() {
   return (
-    <article className="rules">
+    <article className="prose max-w-none">
       <h1>Pravila – Bela</h1>
       <p>
         Bela (belot) igra se s 32 karte (7, 8, 9, 10, dečko, dama, kralj, as u četiri boje). Igraju četiri igrača u dva para;
@@ -36,7 +36,7 @@ function Hr() {
         talona.
       </p>
       <h2>Snaga i vrijednost karata</h2>
-      <div className="rules-cols">
+      <div className="flex flex-wrap gap-8">
         <div>
           <h3>Adut</h3>
           <Points trump />
@@ -81,7 +81,7 @@ function Hr() {
 
 function En() {
   return (
-    <article className="rules">
+    <article className="prose max-w-none">
       <h1>Rules – Bela</h1>
       <p>
         Bela (Croatian Belot) uses 32 cards (7, 8, 9, 10, J, Q, K, A in four suits). Four players form two partnerships; partners
@@ -94,7 +94,7 @@ function En() {
         cards.
       </p>
       <h2>Card ranks and points</h2>
-      <div className="rules-cols">
+      <div className="flex flex-wrap gap-8">
         <div>
           <h3>Trump</h3>
           <Points trump />

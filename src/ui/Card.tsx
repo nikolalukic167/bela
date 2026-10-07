@@ -14,7 +14,7 @@ const FACE: Record<string, string> = { J: 'J', Q: 'Q', K: 'K' };
 
 /** Playing card drawn as inline SVG; scales with its CSS width. */
 export function Card({ card, faceDown, className = '', onClick, disabled, selected, label }: Props) {
-  const classes = ['card', className, disabled ? 'card--disabled' : '', selected ? 'card--selected' : '']
+  const classes = ['playing-card', className, disabled ? 'playing-card--disabled' : '', selected ? 'playing-card--selected' : '']
     .filter(Boolean)
     .join(' ');
   const svg = faceDown || !card ? <CardBack /> : <CardFace card={card} />;

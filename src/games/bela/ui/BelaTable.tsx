@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
 import { Card } from '../../../ui/Card';
+import { AppShell, type MenuAction } from '../../../ui/AppShell';
+import { Modal, ModalActions } from '../../../ui/Modal';
+import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
 import { useGame } from '../../../ui/useGame';
 import { HUMAN_SEAT } from '../engine';
 import { belaGame } from '../game';
@@ -24,11 +27,13 @@ const SEAT_NAME: Record<Position, StringKey> = {
 const canHover = () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 export function BelaTable() {
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const { speed } = useSettings();
   const { view, act, newGame, quit } = useGame(belaGame, {
     humanSeat: HUMAN_SEAT,
-    botDelay: 650,
-    autoDelay: 1100,
+    botDelay: SPEED_DELAYS[speed].bot,
+    autoDelay: SPEED_DELAYS[speed].auto,
     storageKey: 'bela:v2',
   });
   const [showSettings, setShowSettings] = useState(false);
@@ -41,45 +46,47 @@ export function BelaTable() {
     newGame(o);
   };
 
+  const gameActions: MenuAction[] = view
+    ? [
+        { label: t('nav.newGame'), onClick: () => setShowSettings(true) },
+        { label: t('score.sheet'), onClick: () => setShowSheet(true) },
+        { label: t('nav.rules'), onClick: () => navigate('/rules/bela') },
+      ]
+    : [];
+
   if (!view) {
     return (
-      <div className="table-page">
-        <NewGameDialog initial={lastOptions} onStart={start} />
-      </div>
+      <AppShell fixed>
+        <div className="felt-bg flex-1" />
+        <NewGameDialog initial={lastOptions} onStart={start} onCancel={() => navigate('/')} />
+      </AppShell>
     );
   }
 
   return (
-    <div className="table-page">
-      <header className="table-bar">
-        <Link to="/" className="bar-btn" aria-label={t('nav.home')}>
-          ⌂
-        </Link>
-        <ScoreBar view={view} />
-        <TrumpBadge view={view} />
-        <div className="bar-actions">
-          <button type="button" className="bar-btn sheet-toggle" onClick={() => setShowSheet((v) => !v)} aria-label={t('score.sheet')}>
-            ☰
-          </button>
-          <button type="button" className="bar-btn lang-toggle" onClick={() => setLang(lang === 'hr' ? 'en' : 'hr')}>
-            {lang === 'hr' ? 'EN' : 'HR'}
-          </button>
-          <Link to="/rules/bela" className="bar-btn" aria-label={t('nav.rules')}>
-            ?
-          </Link>
-          <button type="button" className="bar-btn" onClick={() => setShowSettings(true)} aria-label={t('nav.newGame')}>
-            ＋
-          </button>
-        </div>
-      </header>
-
-      <div className="table-layout">
+    <AppShell fixed gameActions={gameActions} center={<ScoreBar view={view} />}>
+      <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_220px]">
         <Table view={view} onAct={act} />
-        <div className={`sheet-wrap ${showSheet ? 'sheet-wrap--open' : ''}`}>
-          <ScoreSheet view={view} />
-        </div>
+        <aside className="hidden lg:block p-3 pl-0">
+          <div className="card bg-base-100 shadow-md">
+            <div className="card-body p-3">
+              <h3 className="card-title text-base">{t('score.sheet')}</h3>
+              <ScoreSheet view={view} />
+            </div>
+          </div>
+        </aside>
       </div>
 
+      {showSheet && (
+        <Modal title={t('score.sheet')}>
+          <ScoreSheet view={view} />
+          <ModalActions>
+            <button type="button" className="btn" onClick={() => setShowSheet(false)}>
+              {t('settings.cancel')}
+            </button>
+          </ModalActions>
+        </Modal>
+      )}
       {(view.phase === 'handOver' || view.phase === 'matchOver') && (
         <HandSummary view={view} onNext={() => act({ type: 'next' })} onNewGame={() => setShowSettings(true)} />
       )}
@@ -93,32 +100,25 @@ export function BelaTable() {
           onCancel={() => setShowSettings(false)}
         />
       )}
-    </div>
+    </AppShell>
   );
 }
 
 function ScoreBar({ view }: { view: SeatView }) {
   const { t } = useI18n();
   return (
-    <div className="score-bar" aria-live="polite">
-      <span className="score-team">
-        {t('team.us')} <strong>{view.scores[0]}</strong>
-      </span>
-      <span className="score-sep">:</span>
-      <span className="score-team">
-        <strong>{view.scores[1]}</strong> {t('team.them')}
-      </span>
-    </div>
-  );
-}
-
-function TrumpBadge({ view }: { view: SeatView }) {
-  const { t } = useI18n();
-  if (!view.trump || view.callerSeat === null) return <div className="trump-badge trump-badge--empty" />;
-  return (
-    <div className="trump-badge" title={t('trump.label')}>
-      <span className={`suit suit--${view.trump}`}>{SUIT_SYMBOL[view.trump]}</span>
-      <span className="trump-caller">{t(SEAT_NAME[positionOf(view.callerSeat, view.options)])}</span>
+    <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
+      <div className="flex items-baseline gap-1.5 text-sm whitespace-nowrap" aria-live="polite">
+        {t('team.us')} <strong className="text-lg text-primary tabular-nums">{view.scores[0]}</strong>
+        <span className="opacity-50">:</span>
+        <strong className="text-lg text-primary tabular-nums">{view.scores[1]}</strong> {t('team.them')}
+      </div>
+      {view.trump && view.callerSeat !== null && (
+        <div className="badge badge-lg bg-white text-neutral border-0 gap-1" title={t('trump.label')}>
+          <span className={`suit suit--${view.trump} text-xl leading-none`}>{SUIT_SYMBOL[view.trump]}</span>
+          <span className="text-xs hidden sm:inline">{t(SEAT_NAME[positionOf(view.callerSeat, view.options)])}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -177,7 +177,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
             <Card key={`talon${i}`} faceDown className="hand-card hand-card--talon" />
           ))}
         </div>
-        {playing && view.isMyTurn && <p className="status">{t('status.yourTurn')}</p>}
+        {playing && view.isMyTurn && <p className="your-turn text-sm font-bold text-warning">{t('status.yourTurn')}</p>}
       </section>
 
       {view.phase === 'trump' && view.isMyTurn && <TrumpPicker view={view} onAct={onAct} />}
@@ -196,7 +196,7 @@ function Opponent({ view, seat }: { view: SeatView; seat: number }) {
           <Card key={i} faceDown className="opp-card" />
         ))}
       </div>
-      <span className="opp-count">{count}</span>
+      <span className="opp-count badge badge-neutral">{count}</span>
       <SeatBubble view={view} seat={seat} />
     </section>
   );
@@ -209,11 +209,17 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   if (info.passed) note = t('status.passed');
   else if (info.isTurn && seat !== view.seat) note = t('status.thinking');
   return (
-    <div className={`seat-tag ${info.isTurn ? 'seat-tag--active' : ''} ${info.isDealer ? 'seat-tag--dealer' : ''}`}>
-      <span className="seat-name">{t(SEAT_NAME[positionOf(seat, view.options)])}</span>
-      {info.isDealer && <span className="dealer-chip" title="dealer">D</span>}
-      {note && <span className="seat-note">{note}</span>}
-      {info.bela && <span className="bela-chip">{t('decl.bela')}</span>}
+    <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
+      <span className={`badge badge-sm ${info.isTurn ? 'badge-warning' : 'badge-neutral'}`}>
+        {t(SEAT_NAME[positionOf(seat, view.options)])}
+        {note && <em className="font-normal">{note}</em>}
+      </span>
+      {info.isDealer && (
+        <span className="badge badge-xs badge-soft" title="dealer">
+          D
+        </span>
+      )}
+      {info.bela && <span className="badge badge-sm badge-error">{t('decl.bela')}</span>}
     </div>
   );
 }
@@ -221,24 +227,35 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
 function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
   return (
-    <div className="trump-panel" role="dialog" aria-label={t('trump.title')}>
-      <h2>{t('trump.title')}</h2>
-      {view.mustCall && <p className="note">{t('trump.forced')}</p>}
-      <div className="trump-grid">
-        {SUITS.map((suit) => (
-          <button key={suit} type="button" className="trump-btn" onClick={() => onAct({ type: 'call', suit })}>
-            <span className={`suit suit--${suit}`}>{SUIT_SYMBOL[suit]}</span>
-            <span>{t(`suit.${suit}` as StringKey)}</span>
-          </button>
-        ))}
-      </div>
-      {!view.mustCall && (
-        <div className="modal-actions">
-          <button type="button" className="btn btn--ghost" onClick={() => onAct({ type: 'pass' })}>
-            {t('trump.pass')}
-          </button>
+    <div
+      className="trump-panel card bg-base-100 shadow-xl absolute left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2 z-10 w-[min(360px,calc(100%-32px))]"
+      role="dialog"
+      aria-label={t('trump.title')}
+    >
+      <div className="card-body p-4">
+        <h2 className="card-title justify-center">{t('trump.title')}</h2>
+        {view.mustCall && <div className="alert alert-warning alert-soft py-2">{t('trump.forced')}</div>}
+        <div className="grid grid-cols-4 gap-2">
+          {SUITS.map((suit) => (
+            <button
+              key={suit}
+              type="button"
+              className="trump-btn btn btn-outline h-auto flex-col gap-0 py-2 bg-white text-neutral hover:bg-base-200"
+              onClick={() => onAct({ type: 'call', suit })}
+            >
+              <span className={`suit suit--${suit} text-3xl leading-none`}>{SUIT_SYMBOL[suit]}</span>
+              <span className="text-xs font-normal">{t(`suit.${suit}` as StringKey)}</span>
+            </button>
+          ))}
         </div>
-      )}
+        {!view.mustCall && (
+          <div className="card-actions justify-end">
+            <button type="button" className="btn btn-ghost" onClick={() => onAct({ type: 'pass' })}>
+              {t('trump.pass')}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -262,21 +279,27 @@ function Declarations({ view, onClose }: { view: SeatView; onClose: () => void }
   const { t } = useI18n();
   const { team, declarations } = view.declarations!;
   return (
-    <div className="decl-banner" role="status" onClick={onClose}>
+    <div
+      className="decl-banner card bg-base-100 shadow-xl absolute top-2 left-1/2 -translate-x-1/2 z-10 cursor-pointer text-sm"
+      role="status"
+      onClick={onClose}
+    >
+      <div className="card-body p-3 gap-1">
       <strong>
         {t('decl.title')} – {t(team === 0 ? 'team.us' : 'team.them')}
       </strong>
       {declarations.map((d, i) => (
-        <div key={i} className="decl-row">
-          <span className="decl-seat">{t(SEAT_NAME[positionOf(d.seat, view.options)])}</span>
-          <span className="decl-cards">
+        <div key={i} className="flex items-center gap-2">
+          <span className="min-w-14">{t(SEAT_NAME[positionOf(d.seat, view.options)])}</span>
+          <span className="flex">
             {d.cards.map((c) => (
               <Card key={cardId(c)} card={c} className="mini-card" />
             ))}
           </span>
-          <span className="decl-value">{d.value}</span>
+          <span className="ml-auto font-bold">{d.value}</span>
         </div>
       ))}
+      </div>
     </div>
   );
 }

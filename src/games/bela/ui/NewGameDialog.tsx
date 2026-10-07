@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useI18n } from '../../../i18n/i18n';
-import { Modal } from '../../../ui/Modal';
+import { Modal, ModalActions } from '../../../ui/Modal';
 import type { BelaOptions } from '../state';
 
 export function NewGameDialog({
@@ -14,61 +14,60 @@ export function NewGameDialog({
 }) {
   const { t } = useI18n();
   const [opts, setOpts] = useState(initial);
+  const radio = <T,>(name: string, value: T, current: T, label: string, set: (v: T) => void) => (
+    <label key={String(value)} className="label cursor-pointer gap-2">
+      <input type="radio" name={name} className="radio radio-primary radio-sm" checked={current === value} onChange={() => set(value)} />
+      <span className="text-base-content">{label}</span>
+    </label>
+  );
   return (
     <Modal title={t('settings.title')}>
-      <fieldset className="choice">
-        <legend>{t('settings.target')}</legend>
-        {([501, 701, 1001] as const).map((target) => (
-          <label key={target}>
-            <input type="radio" name="target" checked={opts.target === target} onChange={() => setOpts({ ...opts, target })} />
-            {target}
-          </label>
-        ))}
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">{t('settings.target')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {([501, 701, 1001] as const).map((target) =>
+            radio('target', target, opts.target, String(target), (v) => setOpts({ ...opts, target: v })),
+          )}
+        </div>
       </fieldset>
-      <fieldset className="choice">
-        <legend>{t('settings.direction')}</legend>
-        {(['ccw', 'cw'] as const).map((direction) => (
-          <label key={direction}>
-            <input
-              type="radio"
-              name="direction"
-              checked={opts.direction === direction}
-              onChange={() => setOpts({ ...opts, direction })}
-            />
-            {t(direction === 'ccw' ? 'settings.ccw' : 'settings.cw')}
-          </label>
-        ))}
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">{t('settings.direction')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {(['ccw', 'cw'] as const).map((d) =>
+            radio('direction', d, opts.direction, t(d === 'ccw' ? 'settings.ccw' : 'settings.cw'), (v) => setOpts({ ...opts, direction: v })),
+          )}
+        </div>
       </fieldset>
-      <fieldset className="choice">
-        <legend>{t('settings.houseRules')}</legend>
-        <label>
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">{t('settings.houseRules')}</legend>
+        <label className="label cursor-pointer gap-2">
           <input
             type="checkbox"
+            className="checkbox checkbox-primary checkbox-sm"
             checked={opts.belaAlwaysCounts}
             onChange={(e) => setOpts({ ...opts, belaAlwaysCounts: e.target.checked })}
           />
-          {t('settings.belaAlways')}
+          <span className="text-base-content">{t('settings.belaAlways')}</span>
         </label>
       </fieldset>
-      <fieldset className="choice">
-        <legend>{t('settings.tie')}</legend>
-        {(['hangs', 'fails'] as const).map((tie) => (
-          <label key={tie}>
-            <input type="radio" name="tie" checked={opts.tie === tie} onChange={() => setOpts({ ...opts, tie })} />
-            {t(tie === 'hangs' ? 'settings.tieHangs' : 'settings.tieFails')}
-          </label>
-        ))}
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">{t('settings.tie')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {(['hangs', 'fails'] as const).map((tie) =>
+            radio('tie', tie, opts.tie, t(tie === 'hangs' ? 'settings.tieHangs' : 'settings.tieFails'), (v) => setOpts({ ...opts, tie: v })),
+          )}
+        </div>
       </fieldset>
-      <div className="modal-actions">
+      <ModalActions>
         {onCancel && (
-          <button type="button" className="btn btn--ghost" onClick={onCancel}>
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>
             {t('settings.cancel')}
           </button>
         )}
-        <button type="button" className="btn" onClick={() => onStart(opts)}>
+        <button type="button" className="btn btn-primary" onClick={() => onStart(opts)}>
           {t('settings.start')}
         </button>
-      </div>
+      </ModalActions>
     </Modal>
   );
 }
