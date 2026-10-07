@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, legalActions, setup } from './engine';
 import { belaGame } from './game';
 import { HAND_TOTAL } from './rules';
-import { deal, playOutHand, step } from './testkit';
+import { deal, OPTIONS, playOutHand, step } from './testkit';
 
 describe('trump calling', () => {
   it('the dealer cannot pass (mus)', () => {
@@ -59,7 +59,7 @@ describe('a hand played through the engine', () => {
 describe('full matches between bots', () => {
   it('play to completion with consistent hand totals', () => {
     for (let seed = 1; seed <= 200; seed++) {
-      let s = setup({ target: 1001, direction: seed % 2 ? 'ccw' : 'cw' }, seed);
+      let s = setup({ ...OPTIONS, direction: seed % 2 ? 'ccw' : 'cw' }, seed);
       let steps = 0;
       while (!belaGame.isOver(s)) {
         if (++steps > 20000) throw new Error('match did not finish');

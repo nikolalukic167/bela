@@ -9,7 +9,15 @@ export interface BelaOptions {
   target: 501 | 701 | 1001;
   /** Croatian tables traditionally play counter-clockwise. */
   direction: Direction;
+  /** A team that announced bela writes its 20 even when its contract fails. */
+  belaAlwaysCounts: boolean;
+  /** Exact tie for the caller: points hang (visi) or the caller fails (pad). */
+  tie: 'hangs' | 'fails';
 }
+
+export type HandRules = Pick<BelaOptions, 'belaAlwaysCounts' | 'tie'>;
+
+export const DEFAULT_RULES: HandRules = { belaAlwaysCounts: false, tie: 'hangs' };
 
 export type Phase = 'trump' | 'play' | 'collect' | 'handOver' | 'matchOver';
 

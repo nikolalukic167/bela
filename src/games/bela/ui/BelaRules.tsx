@@ -70,6 +70,10 @@ function Hr() {
         <li>Ako su bodovi točno jednaki, bodovi zvača <strong>vise</strong> i dobiva ih pobjednik iduće partije.</li>
         <li>Tko uzme sve štihove (štiglja) dobiva još 90 bodova.</li>
         <li>Pobjeđuje par koji prvi dođe do 1001 boda (može se igrati i do 501 ili 701).</li>
+        <li>
+          Kućna pravila pri novoj igri: <em>bela se uvijek piše</em> (par koji je zvao belu zadržava 20 i kad padne) i
+          <em> kad je jednako</em> – bodovi vise ili zvač pada.
+        </li>
       </ul>
     </article>
   );
@@ -124,6 +128,10 @@ function En() {
         <li>On an exact tie the callers’ points <strong>hang</strong> and go to the winner of the next hand.</li>
         <li>Taking every trick (štiglja) adds 90 points.</li>
         <li>First team to 1001 wins (501 or 701 also available).</li>
+        <li>
+          House rules when starting a game: <em>bela always counts</em> (a team that announced bela keeps its 20 even
+          when its contract fails) and <em>on an exact tie</em> – points hang, or the callers fail.
+        </li>
       </ul>
     </article>
   );

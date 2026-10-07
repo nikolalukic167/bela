@@ -1,7 +1,7 @@
 import type { Suit } from '../../core/cards';
 import type { Declaration } from './declarations';
 import { BELA_VALUE, LAST_TRICK_BONUS, STIGLJA_BONUS } from './rules';
-import type { HandResult } from './state';
+import { DEFAULT_RULES, type HandResult, type HandRules } from './state';
 
 /** Everything a finished hand contributes to scoring. */
 export interface HandTally {
@@ -26,7 +26,7 @@ export interface MatchScore {
 }
 
 /** Score one hand: last trick, štiglja, declarations, bela, and the contract (pad / visi). */
-export function scoreHand(t: HandTally): HandResult {
+export function scoreHand(t: HandTally, rules: HandRules = DEFAULT_RULES): HandResult {
   const caller = t.callerTeam;
   const other = 1 - caller;
 
@@ -61,9 +61,11 @@ export function scoreHand(t: HandTally): HandResult {
   if (totals[caller] * 2 > all) {
     score[0] = totals[0];
     score[1] = totals[1];
-  } else if (totals[caller] * 2 < all) {
+  } else if (totals[caller] * 2 < all || rules.tie === 'fails') {
     fell = true;
-    score[other] = all;
+    const kept = rules.belaAlwaysCounts ? bela[caller] : 0;
+    score[caller] = kept;
+    score[other] = all - kept;
   } else {
     hung = true;
     score[other] = totals[other];

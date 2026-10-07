@@ -86,3 +86,18 @@ describe('settleHand', () => {
     expect(settleHand(fresh, belot, 1001).match.winner).toBe(1);
   });
 });
+
+describe('house rules', () => {
+  it('bela always counts: a failed caller still writes its bela', () => {
+    const r = scoreHand(tally({ trickPoints: [50, 102], belaCalled: [1, 0] }), { belaAlwaysCounts: true, tie: 'hangs' });
+    expect(r.fell).toBe(true);
+    expect(r.score).toEqual([20, 162]);
+  });
+
+  it('tie fails: an exact tie counts as a failed contract and nothing hangs', () => {
+    const r = scoreHand(tally({ trickPoints: [71, 81] }), { belaAlwaysCounts: false, tie: 'fails' });
+    expect(r.fell).toBe(true);
+    expect(r.hung).toBe(false);
+    expect(r.score).toEqual([0, 162]);
+  });
+});

@@ -4,7 +4,7 @@ import { declarationWinner, findDeclarations } from './declarations';
 import { legalCards, winningIndex } from './legal';
 import { cardPoints } from './rules';
 import { scoreHand, settleHand } from './scoring';
-import type { BelaAction, BelaOptions, BelaState } from './state';
+import { DEFAULT_RULES, type BelaAction, type BelaOptions, type BelaState } from './state';
 
 export const NUM_PLAYERS = 4;
 export const HUMAN_SEAT = 0;
@@ -222,7 +222,7 @@ function finishHand(s: BelaState): BelaState {
     declarations: s.declarations,
     declarationTeam: s.declarationTeam,
     belaCalled: s.belaCalled,
-  });
+  }, { ...DEFAULT_RULES, ...s.options });
   const { match, result } = settleHand({ scores: s.scores, hanging: s.hanging, winner: null }, hand, s.options.target);
   return {
     ...s,

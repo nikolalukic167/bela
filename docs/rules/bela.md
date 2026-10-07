@@ -40,4 +40,7 @@ Last trick +10 → 162 per hand.
 - Less than half → **pad**: opponents score the combined total.
 - Exactly half → **visi**: opponents score their part, callers' part is held and awarded to the winner of the next decided hand.
 - **Štiglja** (all 8 tricks): +90.
+- House rules (new-game options, defaults first):
+  - *Bela always counts* (off): when on, a failed caller still writes its own bela; opponents get the rest.
+  - *Exact tie* (hangs): `hangs` = visi as above; `fails` = the tie is a pad.
 - Match target 1001 (501/701 optional). If both teams pass the target, the higher wins; on a tie play continues.

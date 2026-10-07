@@ -3,7 +3,7 @@ import { RANKS_32, buildDeck, sameCard, shuffle, type Card, type Rank, type Suit
 import { createRng } from '../../core/rng';
 import { apply, autoAction, currentPlayer, setup } from './engine';
 import { belaGame } from './game';
-import type { BelaOptions, BelaState } from './state';
+import { DEFAULT_RULES, type BelaOptions, type BelaState } from './state';
 
 const SUIT: Record<string, Suit> = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
 
@@ -25,7 +25,7 @@ export function arrangedDeck(seats: Partial<Record<number, string>>): Card[] {
   return [...eight.flatMap((h) => h.slice(0, 6)), ...eight.flatMap((h) => h.slice(6))];
 }
 
-export const OPTIONS: BelaOptions = { target: 1001, direction: 'ccw' };
+export const OPTIONS: BelaOptions = { target: 1001, direction: 'ccw', ...DEFAULT_RULES };
 
 export const deal = (seats: Partial<Record<number, string>>, options = OPTIONS) =>
   setup(options, 1, arrangedDeck(seats));

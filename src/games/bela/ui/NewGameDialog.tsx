@@ -39,6 +39,26 @@ export function NewGameDialog({
           </label>
         ))}
       </fieldset>
+      <fieldset className="choice">
+        <legend>{t('settings.houseRules')}</legend>
+        <label>
+          <input
+            type="checkbox"
+            checked={opts.belaAlwaysCounts}
+            onChange={(e) => setOpts({ ...opts, belaAlwaysCounts: e.target.checked })}
+          />
+          {t('settings.belaAlways')}
+        </label>
+      </fieldset>
+      <fieldset className="choice">
+        <legend>{t('settings.tie')}</legend>
+        {(['hangs', 'fails'] as const).map((tie) => (
+          <label key={tie}>
+            <input type="radio" name="tie" checked={opts.tie === tie} onChange={() => setOpts({ ...opts, tie })} />
+            {t(tie === 'hangs' ? 'settings.tieHangs' : 'settings.tieFails')}
+          </label>
+        ))}
+      </fieldset>
       <div className="modal-actions">
         {onCancel && (
           <button type="button" className="btn btn--ghost" onClick={onCancel}>
