@@ -1,13 +1,13 @@
 import { SUIT_SYMBOL } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import { Modal } from '../../../ui/Modal';
-import type { BelaState } from '../state';
+import type { SeatView } from '../view';
 
-export function HandSummary({ state, onNext, onNewGame }: { state: BelaState; onNext: () => void; onNewGame: () => void }) {
+export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNext: () => void; onNewGame: () => void }) {
   const { t } = useI18n();
-  const r = state.history[state.history.length - 1];
-  const over = state.phase === 'matchOver';
-  const title = over ? t(state.winner === 0 ? 'match.won' : 'match.lost') : t('hand.title');
+  const r = view.history[view.history.length - 1];
+  const over = view.phase === 'matchOver';
+  const title = over ? t(view.winner === 0 ? 'match.won' : 'match.lost') : t('hand.title');
   const row = (label: string, v: [number, number]) => (
     <tr>
       <th scope="row">{label}</th>
@@ -35,7 +35,7 @@ export function HandSummary({ state, onNext, onNewGame }: { state: BelaState; on
           {row(t('hand.bela'), r.bela)}
           {row(t('hand.total'), r.score)}
         </tbody>
-        <tfoot>{row('Σ', state.scores)}</tfoot>
+        <tfoot>{row('Σ', view.scores)}</tfoot>
       </table>
       {r.stiglja !== null && <p className="note">{t('hand.stiglja')}</p>}
       {r.fell && <p className="note note--bad">{t('hand.fell')}</p>}

@@ -13,8 +13,9 @@ interface Options {
 /**
  * Drives any GameDefinition: applies human actions, runs bots and automatic
  * system actions with delays, and persists the game to localStorage.
+ * The UI only gets the human seat's view.
  */
-export function useGame<S, A, O>(def: GameDefinition<S, A, O>, opts: Options) {
+export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Options) {
   const [state, setState] = useState<S | null>(() => loadJson<S>(opts.storageKey));
   const rngRef = useRef(createRng(randomSeed()));
 
@@ -32,7 +33,7 @@ export function useGame<S, A, O>(def: GameDefinition<S, A, O>, opts: Options) {
       next = auto;
       delay = opts.autoDelay;
     } else if (player !== null && player !== opts.humanSeat) {
-      next = def.bot(state, player, rngRef.current);
+      next = def.bot(def.view(state, player), rngRef.current);
     }
     if (next === null) return;
     const action = next;
@@ -40,20 +41,15 @@ export function useGame<S, A, O>(def: GameDefinition<S, A, O>, opts: Options) {
     return () => clearTimeout(timer);
   }, [state, def, opts.humanSeat, opts.botDelay, opts.autoDelay]);
 
-  const act = useCallback(
-    (a: A) => setState((s) => (s ? def.apply(s, a) : s)),
-    [def],
-  );
+  const act = useCallback((a: A) => setState((s) => (s ? def.apply(s, a) : s)), [def]);
 
-  const newGame = useCallback(
-    (options: O) => setState(def.setup(options, randomSeed())),
-    [def],
-  );
+  const newGame = useCallback((options: O) => setState(def.setup(options, randomSeed())), [def]);
 
   const quit = useCallback(() => {
     removeKey(opts.storageKey);
     setState(null);
   }, [opts.storageKey]);
 
-  return { state, act, newGame, quit };
+  const view = state ? def.view(state, opts.humanSeat) : null;
+  return { view, act, newGame, quit };
 }

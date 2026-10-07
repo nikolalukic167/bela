@@ -31,6 +31,7 @@ export interface HandResult {
   hung: boolean; // exact tie – caller's points carried over (visi)
   belot: number | null; // team holding an 8-card sequence
   score: [number, number]; // what was written down this hand
+  hanging: number; // caller team's total; carried over when hung
 }
 
 export interface BelaState {
@@ -55,7 +56,8 @@ export interface BelaState {
   trick: Played[];
   lastTrick: Played[] | null;
   tricksTaken: [number, number];
-  cardPoints: [number, number];
+  /** Card points won in tricks so far, without the last-trick bonus. */
+  trickPoints: [number, number];
   belaCalled: [number, number];
   /** Seats that announced bela, for UI. */
   belaSeats: number[];

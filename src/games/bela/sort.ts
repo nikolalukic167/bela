@@ -1,5 +1,5 @@
-import type { Card, Suit } from '../../../core/cards';
-import { strength } from '../rules';
+import type { Card, Suit } from '../../core/cards';
+import { strength } from './rules';
 
 /** Group by suit (alternating colours, trump first) and order by strength. */
 export function sortHand(hand: Card[], trump: Suit | null): Card[] {

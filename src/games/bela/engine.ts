@@ -1,11 +1,9 @@
-import { RANKS_32, buildDeck, sameCard, shuffle, type Suit } from '../../core/cards';
-import type { GameDefinition } from '../../core/game';
+import { RANKS_32, buildDeck, sameCard, shuffle, type Card, type Suit } from '../../core/cards';
 import { createRng } from '../../core/rng';
-import { chooseAction } from './bot';
 import { declarationWinner, findDeclarations } from './declarations';
 import { legalCards, winningIndex } from './legal';
-import { cardPoints, LAST_TRICK_BONUS } from './rules';
-import { scoreHand } from './scoring';
+import { cardPoints } from './rules';
+import { scoreHand, settleHand } from './scoring';
 import type { BelaAction, BelaOptions, BelaState } from './state';
 
 export const NUM_PLAYERS = 4;
@@ -27,9 +25,13 @@ export function playOrder(s: BelaState, seat: number): number {
   return 4;
 }
 
-function deal(s: BelaState): BelaState {
-  const rng = createRng(s.seed + s.handNo * 7919);
-  const deck = shuffle(buildDeck(RANKS_32), rng);
+/**
+ * Deck order: cards 0–23 are the six-card hands (seat 0 first), 24–31 the
+ * two-card talons (seat 0 first).
+ */
+function deal(s: BelaState, arranged?: Card[]): BelaState {
+  const deck = arranged ?? shuffle(buildDeck(RANKS_32), createRng(s.seed + s.handNo * 7919));
+  if (deck.length !== 32) throw new Error('A Bela deck has 32 cards');
   const hands = [0, 1, 2, 3].map((i) => deck.slice(i * 6, i * 6 + 6));
   const talon = [0, 1, 2, 3].map((i) => deck.slice(24 + i * 2, 24 + i * 2 + 2));
   return {
@@ -47,7 +49,7 @@ function deal(s: BelaState): BelaState {
     trick: [],
     lastTrick: null,
     tricksTaken: [0, 0],
-    cardPoints: [0, 0],
+    trickPoints: [0, 0],
     belaCalled: [0, 0],
     belaSeats: [],
     belaHolder: -1,
@@ -55,7 +57,8 @@ function deal(s: BelaState): BelaState {
   };
 }
 
-export function setup(options: BelaOptions, seed: number): BelaState {
+/** `deck` arranges the first deal (see `deal`); later deals are shuffled from `seed`. */
+export function setup(options: BelaOptions, seed: number, deck?: Card[]): BelaState {
   const base: BelaState = {
     options,
     seed,
@@ -74,7 +77,7 @@ export function setup(options: BelaOptions, seed: number): BelaState {
     trick: [],
     lastTrick: null,
     tricksTaken: [0, 0],
-    cardPoints: [0, 0],
+    trickPoints: [0, 0],
     belaCalled: [0, 0],
     belaSeats: [],
     belaHolder: -1,
@@ -86,7 +89,7 @@ export function setup(options: BelaOptions, seed: number): BelaState {
   };
   // The dealer is chosen so that the human (seat 0) is first to speak.
   base.dealer = options.direction === 'ccw' ? 3 : 1;
-  return deal(base);
+  return deal(base, deck);
 }
 
 export function currentPlayer(s: BelaState): number | null {
@@ -185,16 +188,15 @@ export function apply(s: BelaState, a: BelaAction): BelaState {
       const team = teamOf(winner);
       const tricksTaken = [...s.tricksTaken] as [number, number];
       tricksTaken[team] += 1;
-      const pts = [...s.cardPoints] as [number, number];
+      const pts = [...s.trickPoints] as [number, number];
       pts[team] += s.trick.reduce((sum, p) => sum + cardPoints(p.card, trump), 0);
       const played = [...s.played, ...s.trick.map((p) => p.card)];
       const handDone = played.length === 32;
-      if (handDone) pts[team] += LAST_TRICK_BONUS;
 
       const after: BelaState = {
         ...s,
         tricksTaken,
-        cardPoints: pts,
+        trickPoints: pts,
         played,
         lastTrick: s.trick,
         trick: [],
@@ -211,45 +213,23 @@ export function apply(s: BelaState, a: BelaAction): BelaState {
 }
 
 function finishHand(s: BelaState): BelaState {
-  const result = scoreHand(s);
-  const scores = [s.scores[0] + result.score[0], s.scores[1] + result.score[1]] as [number, number];
-  let hanging = s.hanging;
-  if (hanging > 0 && !result.hung) {
-    const handWinner = result.fell ? 1 - result.caller : result.caller;
-    scores[handWinner] += hanging;
-    result.score[handWinner] += hanging;
-    hanging = 0;
-  }
-  if (result.hung) hanging += totalOf(result, result.caller);
-
-  let winner: number | null = null;
-  if (result.belot !== null) winner = result.belot;
-  else if (scores[0] >= s.options.target || scores[1] >= s.options.target) {
-    if (scores[0] !== scores[1]) winner = scores[0] > scores[1] ? 0 : 1;
-  }
-
+  const hand = scoreHand({
+    trump: s.trump as Suit,
+    callerTeam: teamOf(s.callerSeat as number),
+    trickPoints: s.trickPoints,
+    tricksTaken: s.tricksTaken,
+    lastTrickTeam: teamOf(s.turn),
+    declarations: s.declarations,
+    declarationTeam: s.declarationTeam,
+    belaCalled: s.belaCalled,
+  });
+  const { match, result } = settleHand({ scores: s.scores, hanging: s.hanging, winner: null }, hand, s.options.target);
   return {
     ...s,
-    scores,
-    hanging,
+    scores: match.scores,
+    hanging: match.hanging,
+    winner: match.winner,
     history: [...s.history, result],
-    phase: winner === null ? 'handOver' : 'matchOver',
-    winner,
+    phase: match.winner === null ? 'handOver' : 'matchOver',
   };
 }
-
-function totalOf(r: { cardPoints: number[]; declarations: number[]; bela: number[] }, team: number) {
-  return r.cardPoints[team] + r.declarations[team] + r.bela[team];
-}
-
-export const belaGame: GameDefinition<BelaState, BelaAction, BelaOptions> = {
-  id: 'bela',
-  defaultOptions: { target: 1001, direction: 'ccw' },
-  setup,
-  currentPlayer,
-  legalActions,
-  apply,
-  autoAction,
-  isOver: (s) => s.phase === 'matchOver',
-  bot: chooseAction,
-};

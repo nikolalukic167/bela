@@ -1,7 +1,7 @@
 import { useI18n } from '../../../i18n/i18n';
-import type { BelaState } from '../state';
+import type { SeatView } from '../view';
 
-export function ScoreSheet({ state }: { state: BelaState }) {
+export function ScoreSheet({ view }: { view: SeatView }) {
   const { t } = useI18n();
   return (
     <aside className="score-sheet" aria-label={t('score.sheet')}>
@@ -14,7 +14,7 @@ export function ScoreSheet({ state }: { state: BelaState }) {
           </tr>
         </thead>
         <tbody>
-          {state.history.map((r, i) => (
+          {view.history.map((r, i) => (
             <tr key={i} className={r.fell ? 'fell' : undefined}>
               <td>{r.score[0]}</td>
               <td>{r.score[1]}</td>
@@ -23,12 +23,12 @@ export function ScoreSheet({ state }: { state: BelaState }) {
         </tbody>
         <tfoot>
           <tr>
-            <td>{state.scores[0]}</td>
-            <td>{state.scores[1]}</td>
+            <td>{view.scores[0]}</td>
+            <td>{view.scores[1]}</td>
           </tr>
         </tfoot>
       </table>
-      <p className="score-target">→ {state.options.target}</p>
+      <p className="score-target">→ {view.options.target}</p>
     </aside>
   );
 }

@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
 import { Card } from '../../../ui/Card';
 import { useGame } from '../../../ui/useGame';
-import { belaGame, HUMAN_SEAT } from '../engine';
-import { winningIndex } from '../legal';
-import type { BelaOptions, BelaState } from '../state';
+import { HUMAN_SEAT } from '../engine';
+import { belaGame } from '../game';
+import type { BelaAction, BelaOptions } from '../state';
+import type { SeatView } from '../view';
 import { HandSummary } from './HandSummary';
 import { NewGameDialog } from './NewGameDialog';
 import { positionOf, type Position } from './positions';
 import { ScoreSheet } from './ScoreSheet';
-import { sortHand } from './sort';
 
 const SEAT_NAME: Record<Position, StringKey> = {
   bottom: 'seat.you',
@@ -25,11 +25,11 @@ const canHover = () => typeof window !== 'undefined' && window.matchMedia('(hove
 
 export function BelaTable() {
   const { t, lang, setLang } = useI18n();
-  const { state, act, newGame, quit } = useGame(belaGame, {
+  const { view, act, newGame, quit } = useGame(belaGame, {
     humanSeat: HUMAN_SEAT,
     botDelay: 650,
     autoDelay: 1100,
-    storageKey: 'bela:v1',
+    storageKey: 'bela:v2',
   });
   const [showSettings, setShowSettings] = useState(false);
   const [showSheet, setShowSheet] = useState(false);
@@ -41,7 +41,7 @@ export function BelaTable() {
     newGame(o);
   };
 
-  if (!state) {
+  if (!view) {
     return (
       <div className="table-page">
         <NewGameDialog initial={lastOptions} onStart={start} />
@@ -55,8 +55,8 @@ export function BelaTable() {
         <Link to="/" className="bar-btn" aria-label={t('nav.home')}>
           ⌂
         </Link>
-        <ScoreBar state={state} />
-        <TrumpBadge state={state} />
+        <ScoreBar view={view} />
+        <TrumpBadge view={view} />
         <div className="bar-actions">
           <button type="button" className="bar-btn sheet-toggle" onClick={() => setShowSheet((v) => !v)} aria-label={t('score.sheet')}>
             ☰
@@ -74,18 +74,18 @@ export function BelaTable() {
       </header>
 
       <div className="table-layout">
-        <Table state={state} onAct={act} />
+        <Table view={view} onAct={act} />
         <div className={`sheet-wrap ${showSheet ? 'sheet-wrap--open' : ''}`}>
-          <ScoreSheet state={state} />
+          <ScoreSheet view={view} />
         </div>
       </div>
 
-      {(state.phase === 'handOver' || state.phase === 'matchOver') && (
-        <HandSummary state={state} onNext={() => act({ type: 'next' })} onNewGame={() => setShowSettings(true)} />
+      {(view.phase === 'handOver' || view.phase === 'matchOver') && (
+        <HandSummary view={view} onNext={() => act({ type: 'next' })} onNewGame={() => setShowSettings(true)} />
       )}
       {showSettings && (
         <NewGameDialog
-          initial={state.options}
+          initial={view.options}
           onStart={(o) => {
             quit();
             start(o);
@@ -97,103 +97,98 @@ export function BelaTable() {
   );
 }
 
-function ScoreBar({ state }: { state: BelaState }) {
+function ScoreBar({ view }: { view: SeatView }) {
   const { t } = useI18n();
   return (
     <div className="score-bar" aria-live="polite">
       <span className="score-team">
-        {t('team.us')} <strong>{state.scores[0]}</strong>
+        {t('team.us')} <strong>{view.scores[0]}</strong>
       </span>
       <span className="score-sep">:</span>
       <span className="score-team">
-        <strong>{state.scores[1]}</strong> {t('team.them')}
+        <strong>{view.scores[1]}</strong> {t('team.them')}
       </span>
     </div>
   );
 }
 
-function TrumpBadge({ state }: { state: BelaState }) {
+function TrumpBadge({ view }: { view: SeatView }) {
   const { t } = useI18n();
-  if (!state.trump || state.callerSeat === null) return <div className="trump-badge trump-badge--empty" />;
+  if (!view.trump || view.callerSeat === null) return <div className="trump-badge trump-badge--empty" />;
   return (
     <div className="trump-badge" title={t('trump.label')}>
-      <span className={`suit suit--${state.trump}`}>{SUIT_SYMBOL[state.trump]}</span>
-      <span className="trump-caller">{t(SEAT_NAME[positionOf(state.callerSeat, state.options)])}</span>
+      <span className={`suit suit--${view.trump}`}>{SUIT_SYMBOL[view.trump]}</span>
+      <span className="trump-caller">{t(SEAT_NAME[positionOf(view.callerSeat, view.options)])}</span>
     </div>
   );
 }
 
-function Table({ state, onAct }: { state: BelaState; onAct: (a: Parameters<typeof belaGame.apply>[1]) => void }) {
-  const { t } = useI18n();
-  const myTurn = belaGame.currentPlayer(state) === HUMAN_SEAT;
-  const legal = useMemo(
-    () => (state.phase === 'play' && myTurn ? belaGame.legalActions(state, HUMAN_SEAT) : []),
-    [state, myTurn],
-  );
-  const legalCards = legal.flatMap((a) => (a.type === 'play' ? [a.card] : []));
-  const [selected, setSelected] = useState<CardT | null>(null);
-  useEffect(() => setSelected(null), [state.turn, state.phase]);
+type Act = (a: BelaAction) => void;
 
-  const hand = sortHand(state.hands[HUMAN_SEAT], state.trump);
+function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
+  const { t } = useI18n();
+  const [selected, setSelected] = useState<CardT | null>(null);
+  useEffect(() => setSelected(null), [view.isMyTurn, view.phase]);
+
+  const canPlay = (c: CardT) => view.playable.some((l) => sameCard(l, c));
   const play = (c: CardT) => {
-    if (!legalCards.some((l) => sameCard(l, c))) return;
+    if (!canPlay(c)) return;
     if (canHover() || (selected && sameCard(selected, c))) onAct({ type: 'play', card: c });
     else setSelected(c);
   };
-
-  const showDecl = state.declarationsShown && state.declarationTeam !== null && state.tricksTaken[0] + state.tricksTaken[1] === 1;
+  const playing = view.phase === 'play';
 
   return (
     <main className="felt">
-      {[1, 2, 3].map((seat) => (
-        <Opponent key={seat} state={state} seat={seat} />
-      ))}
+      {view.seats
+        .filter((s) => s.seat !== view.seat)
+        .map((s) => (
+          <Opponent key={s.seat} view={view} seat={s.seat} />
+        ))}
 
       <div className="trick" aria-label="trick">
-        {state.trick.map((p, i) => {
-          const winning = state.phase === 'collect' && i === winningIndex(state.trick, state.trump!);
-          return (
-            <Card
-              key={cardId(p.card)}
-              card={p.card}
-              className={`trick-card trick-card--${positionOf(p.seat, state.options)} ${winning ? 'trick-card--win' : ''}`}
-            />
-          );
-        })}
-        {showDecl && <Declarations state={state} />}
+        {view.trick.map((p) => (
+          <Card
+            key={cardId(p.card)}
+            card={p.card}
+            className={`trick-card trick-card--${positionOf(p.seat, view.options)} ${
+              view.trickComplete && p.winning ? 'trick-card--win' : ''
+            }`}
+          />
+        ))}
+        {view.shownDeclarations && <Declarations view={view} />}
       </div>
 
       <section className="me">
-        <SeatBubble state={state} seat={HUMAN_SEAT} />
-        <div className={`hand ${myTurn && state.phase === 'play' ? 'hand--active' : ''}`} style={{ ['--n' as string]: hand.length }}>
-          {hand.map((c) => {
-            const isLegal = legalCards.some((l) => sameCard(l, c));
-            return (
-              <Card
-                key={cardId(c)}
-                card={c}
-                className="hand-card"
-                label={`${c.rank} ${t(`suit.${c.suit}` as StringKey)}`}
-                onClick={() => play(c)}
-                disabled={state.phase === 'play' && myTurn ? !isLegal : state.phase === 'play'}
-                selected={!!selected && sameCard(selected, c)}
-              />
-            );
-          })}
-          {state.talon[HUMAN_SEAT]?.map((_, i) => <Card key={`talon${i}`} faceDown className="hand-card hand-card--talon" />)}
+        <SeatBubble view={view} seat={view.seat} />
+        <div className={`hand ${playing && view.isMyTurn ? 'hand--active' : ''}`}>
+          {view.hand.map((c) => (
+            <Card
+              key={cardId(c)}
+              card={c}
+              className="hand-card"
+              label={`${c.rank} ${t(`suit.${c.suit}` as StringKey)}`}
+              onClick={() => play(c)}
+              disabled={playing ? !canPlay(c) : false}
+              selected={!!selected && sameCard(selected, c)}
+            />
+          ))}
+          {Array.from({ length: view.hiddenTalon }, (_, i) => (
+            <Card key={`talon${i}`} faceDown className="hand-card hand-card--talon" />
+          ))}
         </div>
-        {state.phase === 'play' && myTurn && <p className="status">{t('status.yourTurn')}</p>}
+        {playing && view.isMyTurn && <p className="status">{t('status.yourTurn')}</p>}
       </section>
 
-      {state.phase === 'trump' && myTurn && <TrumpPicker state={state} onAct={onAct} />}
+      {view.phase === 'trump' && view.isMyTurn && <TrumpPicker view={view} onAct={onAct} />}
     </main>
   );
 }
 
-function Opponent({ state, seat }: { state: BelaState; seat: number }) {
+function Opponent({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
-  const pos = positionOf(seat, state.options);
-  const count = state.hands[seat].length + (state.talon[seat]?.length ?? 0);
+  const pos = positionOf(seat, view.options);
+  const count = view.seats[seat].cardCount;
   return (
     <section className={`opponent opponent--${pos}`} aria-label={t(SEAT_NAME[pos])}>
       <div className="opp-cards" aria-hidden="true">
@@ -202,36 +197,33 @@ function Opponent({ state, seat }: { state: BelaState; seat: number }) {
         ))}
       </div>
       <span className="opp-count">{count}</span>
-      <SeatBubble state={state} seat={seat} />
+      <SeatBubble view={view} seat={seat} />
     </section>
   );
 }
 
-function SeatBubble({ state, seat }: { state: BelaState; seat: number }) {
+function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
-  const pos = positionOf(seat, state.options);
-  const active = belaGame.currentPlayer(state) === seat && (state.phase === 'trump' || state.phase === 'play');
+  const info = view.seats[seat];
   let note = '';
-  if (state.phase === 'trump' && state.passed.includes(seat)) note = t('status.passed');
-  else if (active && seat !== HUMAN_SEAT) note = t('status.thinking');
-  const bela = state.belaSeats.includes(seat) && state.phase !== 'trump';
+  if (info.passed) note = t('status.passed');
+  else if (info.isTurn && seat !== view.seat) note = t('status.thinking');
   return (
-    <div className={`seat-tag ${active ? 'seat-tag--active' : ''} ${seat === state.dealer ? 'seat-tag--dealer' : ''}`}>
-      <span className="seat-name">{t(SEAT_NAME[pos])}</span>
-      {seat === state.dealer && <span className="dealer-chip" title="dealer">D</span>}
+    <div className={`seat-tag ${info.isTurn ? 'seat-tag--active' : ''} ${info.isDealer ? 'seat-tag--dealer' : ''}`}>
+      <span className="seat-name">{t(SEAT_NAME[positionOf(seat, view.options)])}</span>
+      {info.isDealer && <span className="dealer-chip" title="dealer">D</span>}
       {note && <span className="seat-note">{note}</span>}
-      {bela && <span className="bela-chip">{t('decl.bela')}</span>}
+      {info.bela && <span className="bela-chip">{t('decl.bela')}</span>}
     </div>
   );
 }
 
-function TrumpPicker({ state, onAct }: { state: BelaState; onAct: (a: Parameters<typeof belaGame.apply>[1]) => void }) {
+function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
-  const forced = state.dealer === HUMAN_SEAT;
   return (
     <div className="trump-panel" role="dialog" aria-label={t('trump.title')}>
       <h2>{t('trump.title')}</h2>
-      {forced && <p className="note">{t('trump.forced')}</p>}
+      {view.mustCall && <p className="note">{t('trump.forced')}</p>}
       <div className="trump-grid">
         {SUITS.map((suit) => (
           <button key={suit} type="button" className="trump-btn" onClick={() => onAct({ type: 'call', suit })}>
@@ -240,7 +232,7 @@ function TrumpPicker({ state, onAct }: { state: BelaState; onAct: (a: Parameters
           </button>
         ))}
       </div>
-      {!forced && (
+      {!view.mustCall && (
         <div className="modal-actions">
           <button type="button" className="btn btn--ghost" onClick={() => onAct({ type: 'pass' })}>
             {t('trump.pass')}
@@ -251,18 +243,17 @@ function TrumpPicker({ state, onAct }: { state: BelaState; onAct: (a: Parameters
   );
 }
 
-function Declarations({ state }: { state: BelaState }) {
+function Declarations({ view }: { view: SeatView }) {
   const { t } = useI18n();
-  const team = state.declarationTeam as number;
-  const decls = state.declarations.filter((d) => d.seat % 2 === team && d.kind !== 'belot');
+  const { team, declarations } = view.shownDeclarations!;
   return (
     <div className="decl-banner" role="status">
       <strong>
         {t('decl.title')} – {t(team === 0 ? 'team.us' : 'team.them')}
       </strong>
-      {decls.map((d, i) => (
+      {declarations.map((d, i) => (
         <div key={i} className="decl-row">
-          <span className="decl-seat">{t(SEAT_NAME[positionOf(d.seat, state.options)])}</span>
+          <span className="decl-seat">{t(SEAT_NAME[positionOf(d.seat, view.options)])}</span>
           <span className="decl-cards">
             {d.cards.map((c) => (
               <Card key={cardId(c)} card={c} className="mini-card" />
