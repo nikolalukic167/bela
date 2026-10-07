@@ -22,7 +22,13 @@ src/ui/            shared UI: SVG Card, Modal, useGame hook (bots, auto actions,
 src/pages/         Home (game picker), Play/:gameId, Rules/:gameId
 src/i18n/          Croatian / English strings
 docs/rules/bela.md exact rules the engine implements
+docs/bots/         bot levels (random → heuristic → tracking → PIMC → ISMCTS), experiments, report
 ```
+
+## Bots
+
+Players pick the bot strength (Easy / Medium / Hard / Expert) when starting a game. How the bots work
+and how they were measured: [docs/bots/README.md](docs/bots/README.md) and [docs/bots/report.md](docs/bots/report.md).
 
 ### Adding another game
 1. Implement `GameDefinition` (`src/core/game.ts`) in `src/games/<id>/` – pure functions over JSON state.

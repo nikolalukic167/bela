@@ -13,6 +13,8 @@ export interface BelaOptions {
   belaAlwaysCounts: boolean;
   /** Exact tie for the caller: points hang (visi) or the caller fails (pad). */
   tie: 'hangs' | 'fails';
+  /** Difficulty of the bots (see bots/index.ts). Missing in games saved before levels existed. */
+  botLevel?: 'easy' | 'medium' | 'hard' | 'expert';
 }
 
 export type HandRules = Pick<BelaOptions, 'belaAlwaysCounts' | 'tie'>;
@@ -62,6 +64,8 @@ export interface BelaState {
   /** Declarations are shown to the table after the first trick. */
   declarationsShown: boolean;
   trick: Played[];
+  /** Completed tricks this hand, in order, with who played each card. */
+  tricks: Played[][];
   lastTrick: Played[] | null;
   tricksTaken: [number, number];
   /** Card points won in tricks so far, without the last-trick bonus. */

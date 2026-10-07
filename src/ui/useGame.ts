@@ -27,18 +27,25 @@ export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Optio
     if (!state || def.isOver(state)) return;
     const auto = def.autoAction(state);
     const player = def.currentPlayer(state);
-    let next: A | null = null;
-    let delay = opts.botDelay;
+    const commit = (action: A) => setState((s) => (s === state ? def.apply(s, action) : s));
+    const timers: ReturnType<typeof setTimeout>[] = [];
     if (auto) {
-      next = auto;
-      delay = opts.autoDelay;
+      timers.push(setTimeout(() => commit(auto), opts.autoDelay));
     } else if (player !== null && player !== opts.humanSeat) {
-      next = def.bot(def.view(state, player), rngRef.current);
+      // Think time varies (±40%) so bots don't feel mechanical. The move is
+      // computed after the last card has painted; slow bots eat into the delay.
+      const think = opts.botDelay * (0.6 + 0.8 * Math.random());
+      const paint = 30;
+      timers.push(
+        setTimeout(() => {
+          const t0 = performance.now();
+          const action = def.bot(def.view(state, player), rngRef.current);
+          const rest = Math.max(0, think - paint - (performance.now() - t0));
+          timers.push(setTimeout(() => commit(action), rest));
+        }, paint),
+      );
     }
-    if (next === null) return;
-    const action = next;
-    const timer = setTimeout(() => setState((s) => (s === state ? def.apply(s, action) : s)), delay);
-    return () => clearTimeout(timer);
+    return () => timers.forEach(clearTimeout);
   }, [state, def, opts.humanSeat, opts.botDelay, opts.autoDelay]);
 
   const act = useCallback((a: A) => setState((s) => (s ? def.apply(s, a) : s)), [def]);

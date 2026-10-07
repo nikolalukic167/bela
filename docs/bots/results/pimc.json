@@ -1,0 +1,28 @@
+[
+ {
+  "a": "pimc",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 19.42,
+  "se": 1.41,
+  "aCallRate": 0.5,
+  "aFellRate": 0.162,
+  "bFellRate": 0.268,
+  "cardDiff": 9.83,
+  "seconds": 615.041
+ },
+ {
+  "a": "pimc",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 19.2,
+  "se": 1.37,
+  "aCallRate": 0.5,
+  "aFellRate": 0.159,
+  "bFellRate": 0.265,
+  "cardDiff": 10.06,
+  "seconds": 586.182
+ }
+]
