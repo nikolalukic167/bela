@@ -1,0 +1,36 @@
+name: Convex auth setup
+
+# Run once from the Actions tab after adding the CONVEX_DEPLOY_KEY secret.
+# Generates the sign-in signing keys and sets SITE_URL on the Convex
+# production deployment. Keys never appear in logs.
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: URL of the site (no trailing slash)
+        default: https://nikolalukic167.github.io/bela
+        required: true
+      force:
+        description: Rotate existing keys (signs everyone out)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set JWT keys and SITE_URL
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          SITE_URL: ${{ inputs.site_url }}
+          FORCE: ${{ inputs.force }}
+        run: node scripts/convex-auth-setup.mjs
