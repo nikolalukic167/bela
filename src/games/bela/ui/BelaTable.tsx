@@ -156,8 +156,8 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
             }`}
           />
         ))}
-        {view.shownDeclarations && <Declarations view={view} />}
       </div>
+      <DeclarationsAnnouncement view={view} />
 
       <section className="me">
         <SeatBubble view={view} seat={view.seat} />
@@ -243,11 +243,26 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   );
 }
 
-function Declarations({ view }: { view: SeatView }) {
+const ANNOUNCE_MS = 3000;
+
+/** Shows the counting declarations once per hand, briefly, away from the trick. */
+function DeclarationsAnnouncement({ view }: { view: SeatView }) {
+  const key = view.declarations ? `${view.handNo}:${view.declarations.team}` : null;
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    const timer = setTimeout(() => setDismissed(key), ANNOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [key]);
+  if (!key || dismissed === key) return null;
+  return <Declarations view={view} onClose={() => setDismissed(key)} />;
+}
+
+function Declarations({ view, onClose }: { view: SeatView; onClose: () => void }) {
   const { t } = useI18n();
-  const { team, declarations } = view.shownDeclarations!;
+  const { team, declarations } = view.declarations!;
   return (
-    <div className="decl-banner" role="status">
+    <div className="decl-banner" role="status" onClick={onClose}>
       <strong>
         {t('decl.title')} – {t(team === 0 ? 'team.us' : 'team.them')}
       </strong>

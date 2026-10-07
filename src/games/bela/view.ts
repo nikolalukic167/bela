@@ -28,6 +28,8 @@ export interface TrickCard extends Played {
  */
 export interface SeatView {
   seat: number;
+  /** Increments with every deal. */
+  handNo: number;
   options: BelaOptions;
   phase: Phase;
   dealer: number;
@@ -47,8 +49,8 @@ export interface SeatView {
   trick: TrickCard[];
   /** All four cards are down and the trick is about to be collected. */
   trickComplete: boolean;
-  /** Declarations that count, shown to everyone during the second trick. */
-  shownDeclarations: { team: number; declarations: Declaration[] } | null;
+  /** Declarations that count, public from the second trick until the hand ends. */
+  declarations: { team: number; declarations: Declaration[] } | null;
   /** Cards from completed tricks this hand. */
   played: Card[];
   tricksTaken: [number, number];
@@ -61,11 +63,11 @@ export function viewFor(s: BelaState, seat: number): SeatView {
   const turn = currentPlayer(s);
   const legal = legalActions(s, seat);
   const winIdx = s.trick.length > 0 && s.trump ? winningIndex(s.trick, s.trump) : -1;
-  const secondTrick = s.declarationsShown && s.tricksTaken[0] + s.tricksTaken[1] === 1;
   const team = s.declarationTeam;
 
   return {
     seat,
+    handNo: s.handNo,
     options: s.options,
     phase: s.phase,
     dealer: s.dealer,
@@ -87,8 +89,8 @@ export function viewFor(s: BelaState, seat: number): SeatView {
     })),
     trick: s.trick.map((p, i) => ({ ...p, winning: i === winIdx })),
     trickComplete: s.phase === 'collect',
-    shownDeclarations:
-      secondTrick && team !== null
+    declarations:
+      s.declarationsShown && team !== null
         ? { team, declarations: s.declarations.filter((d) => d.seat % 2 === team && d.kind !== 'belot') }
         : null,
     played: s.played,

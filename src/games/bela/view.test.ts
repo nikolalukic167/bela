@@ -48,15 +48,17 @@ describe('seat view', () => {
     expect(v.trick.filter((p) => p.winning)).toHaveLength(1);
   });
 
-  it('reveals the counting declarations during the second trick only', () => {
+  it('reveals the counting declarations from the second trick until the hand ends', () => {
     let s = apply(deal({ 0: 'Jh Jd Jc Js 7h 8d 9c 10s' }), { type: 'call', suit: 'spades' });
-    const seen: (number | null)[] = [];
-    while (s.played.length < 12) {
+    const firstTrick: (number | null)[] = [];
+    const later: (number | null)[] = [];
+    while (s.phase === 'play' || s.phase === 'collect') {
+      const team = viewFor(s, 1).declarations?.team ?? null;
+      (s.played.length < 4 ? firstTrick : later).push(team);
       s = step(s);
-      seen.push(viewFor(s, 1).shownDeclarations?.team ?? null);
     }
-    expect(seen.slice(0, 4).every((t) => t === null)).toBe(true); // first trick
-    expect(seen.slice(4, 8).every((t) => t === 0)).toBe(true); // second trick
-    expect(seen[seen.length - 1]).toBeNull(); // third trick
+    expect(firstTrick.every((t) => t === null)).toBe(true);
+    expect(later.length).toBeGreaterThan(20);
+    expect(later.every((t) => t === 0)).toBe(true);
   });
 });

@@ -289,9 +289,12 @@ button.card:disabled { cursor: default; }
 
 .decl-banner {
   position: absolute;
-  inset: auto 50% 50% auto;
-  transform: translate(50%, 50%);
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
+  cursor: pointer;
+  animation: deal-in 0.25s ease-out;
   background: var(--panel);
   color: var(--panel-ink);
   border-radius: var(--radius);
