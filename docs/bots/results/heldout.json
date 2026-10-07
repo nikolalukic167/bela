@@ -1,0 +1,28 @@
+[
+ {
+  "a": "tracker",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": 3.61,
+  "se": 0.61,
+  "aCallRate": 0.5,
+  "aFellRate": 0.188,
+  "bFellRate": 0.208,
+  "cardDiff": 2.05,
+  "seconds": 3.417
+ },
+ {
+  "a": "tracker:bid=learned,match=0",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": 0.98,
+  "se": 0.79,
+  "aCallRate": 0.428,
+  "aFellRate": 0.179,
+  "bFellRate": 0.202,
+  "cardDiff": -5.27,
+  "seconds": 3.827
+ }
+]

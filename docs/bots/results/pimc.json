@@ -63,5 +63,31 @@
   "bFellRate": 0.25,
   "cardDiff": 6.83,
   "seconds": 150.343
+ },
+ {
+  "a": "pimc:samples=20",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 16.1,
+  "se": 1.45,
+  "aCallRate": 0.5,
+  "aFellRate": 0.183,
+  "bFellRate": 0.262,
+  "cardDiff": 8.31,
+  "seconds": 295.211
+ },
+ {
+  "a": "pimc:exact=4",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 18.06,
+  "se": 1.45,
+  "aCallRate": 0.5,
+  "aFellRate": 0.165,
+  "bFellRate": 0.262,
+  "cardDiff": 8.27,
+  "seconds": 34.845
  }
 ]

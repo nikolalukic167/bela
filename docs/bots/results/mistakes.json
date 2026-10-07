@@ -1,0 +1,54 @@
+[
+ {
+  "a": "heuristic:mistakes=0.1",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": -3.04,
+  "se": 0.49,
+  "aCallRate": 0.5,
+  "aFellRate": 0.204,
+  "bFellRate": 0.19,
+  "cardDiff": -1.99,
+  "seconds": 2.37
+ },
+ {
+  "a": "heuristic:mistakes=0.2",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": -6.99,
+  "se": 0.62,
+  "aCallRate": 0.5,
+  "aFellRate": 0.215,
+  "bFellRate": 0.178,
+  "cardDiff": -4.31,
+  "seconds": 2.231
+ },
+ {
+  "a": "heuristic:mistakes=0.3",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": -10.1,
+  "se": 0.71,
+  "aCallRate": 0.5,
+  "aFellRate": 0.227,
+  "bFellRate": 0.172,
+  "cardDiff": -6.4,
+  "seconds": 2.369
+ },
+ {
+  "a": "heuristic:mistakes=0.5",
+  "b": "heuristic",
+  "mode": "hands",
+  "hands": 6000,
+  "meanDiff": -17.06,
+  "se": 0.8,
+  "aCallRate": 0.5,
+  "aFellRate": 0.253,
+  "bFellRate": 0.152,
+  "cardDiff": -9.91,
+  "seconds": 2.289
+ }
+]
