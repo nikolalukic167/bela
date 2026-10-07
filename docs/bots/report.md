@@ -6,12 +6,13 @@ Branch `nikola/bot-research`, October 2026. Code guide: [README.md](README.md). 
 
 - **Strongest bots:** PIMC (Level 3) and ISMCTS (Level 4). They beat the original rule bot by about
   **19 points per hand**, roughly 300 points over a match to 1001. Head to head they are tied
-  (ISMCTS +1.7 ± 4.0). For about the same strength, ISMCTS needs a third of PIMC's compute (or a tenth,
-  with 800 iterations).
+  (ISMCTS +1.7 ± 4.0 at a third of the compute, and +0.0 ± 4.0 when given about the same compute).
+  Cheap ISMCTS (800 iterations, about a fifth of the compute) is only slightly weaker than PIMC.
 - **Card tracking (Level 2):** +3.8 per hand over Level 1, but only after it switched from "what is
   possible" to sampled probabilities. The first version *lost* 6.9 per hand.
-- **Learned trump calling:** a regression on 320k simulated hands gives +3.0 per hand over the
-  hand-tuned threshold, mostly by falling less often (18% vs 21%).
+- **Learned trump calling:** a regression on 320k simulated hands gives **+2.8 ± 0.3** per hand
+  over the hand-tuned threshold on 20,000 fresh deal pairs (+3.0 on the tuning deals). It wins mostly
+  by falling less often (17% vs 21%).
 - **Difficulty levels:** the four levels shipped to players form a clean OpenSkill ladder:
   Easy < Medium < Hard < Expert.
 
@@ -153,9 +154,24 @@ Match win rates behind it:
 | Medium vs Easy | 61.5% |
 | Medium vs random | 98.0% |
 
-### 7. Held-out check
+### 7. Held-out check (fresh deals, never used for tuning)
 
-_Pending: final choices re-run on seeds 900000+._
+| Claim | Tuning seeds | Fresh seeds | Pairs (fresh) |
+|---|---:|---:|---:|
+| Level 2 vs Level 1 | +3.76 ± 0.63 | +3.61 ± 0.61 | 3,000 |
+| Learned vs hand-tuned bidding | +3.01 ± 0.74 | +0.98 ± 0.79 | 3,000 |
+| (same, larger sample) | | **+2.76 ± 0.30** | 20,000 |
+| Hand-tuned threshold 6.5 vs 6.0 | +0.80 ± 0.64 | +0.41 ± 0.25 | 20,000 |
+| Expert vs Hard (both learned bidding) | – | +18.80 ± 2.03 | 500 |
+| ISMCTS 800 it. vs PIMC | – | −3.57 ± 1.85 | 500 |
+| **ISMCTS 9000 it. vs PIMC, roughly equal compute** | – | **+0.04 ± 2.01** | 400 |
+
+- **Level 2 and PIMC replicate.** Their gains hold on fresh deals.
+- **The first bidding re-check came in low.** It was 2.5 SE below the tuning estimate. A 20,000-pair
+  re-run puts the true gain at **+2.8 ± 0.3**: real, and only slightly smaller than tuned. A small
+  sample can mislead in either direction, so the large run is the number to trust.
+- **Compute-matched, ISMCTS and PIMC are equal.** At 800 iterations ISMCTS is slightly weaker than
+  PIMC (−3.6 ± 1.9) while using about a fifth of the compute.
 
 ## Shipped difficulty levels
 
@@ -170,19 +186,19 @@ _Pending: final choices re-run on seeds 900000+._
 
 - **Only bot-vs-bot:** these are strengths against our own bots, never against strong human players.
   A bot can exploit another bot's habits.
-- **Tuning bias:** thresholds were chosen on the seeds they are reported on, a small winner's-curse
-  bias. Section 7 re-checks the choices on fresh deals.
+- **Tuning bias:** thresholds were chosen on the seeds they are reported on. Section 7 re-checks the
+  choices on fresh deals, and the effects hold (bidding shrinks slightly, from +3.0 to +2.8).
 - **One rule set:** counter-clockwise play, 1001, default house rules.
-- **Not compute-matched:** PIMC vs ISMCTS is roughly compute-matched only in the dedicated run
-  (section 7). The other comparisons give the stronger bots far more time per move.
+- **Not compute-matched:** apart from the dedicated PIMC vs ISMCTS run (section 7), comparisons
+  give the stronger bots far more time per move.
 - **Not new methods:** PIMC (Ginsberg's GIB for bridge, 1999; Buro et al. for Skat, 2009) and ISMCTS
   (Cowling, Powley & Whitehouse, 2012) are established. This work applies and measures them for
   Croatian Bela.
 
 ## Next steps
 
-- Use ISMCTS (800–3000 iterations) for Expert if browser speed becomes a problem: same strength,
-  much less compute.
+- Use ISMCTS for Expert if browser speed becomes a problem: 3000 iterations matches PIMC for a
+  third of the compute; 800 iterations is slightly weaker but five times cheaper.
 - Run PIMC on the server for online games, as planned; offline play keeps a time budget.
 - Level 5 (self-play reinforcement learning) is still a research project. The cheapest first step
   is a learned evaluation that replaces the playout policy inside ISMCTS.
