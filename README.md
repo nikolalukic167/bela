@@ -35,3 +35,11 @@ Because engines are pure and serialisable, the same code can later run on a serv
 
 `.github/workflows/deploy.yml` tests, builds and deploys on every push to `main`.
 One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+## Claude Code skills
+
+`.claude/skills/` contains the 27 stable skills from [mattpocock/skills](https://github.com/mattpocock/skills)
+(the set shipped by its `mattpocock-skills` plugin, MIT – see `.claude/skills/LICENSE-mattpocock-skills`),
+copied at upstream commit `f3fc5632f401156837ee3872f14fe33ccf1024ea`. Run `/setup-matt-pocock-skills` once to
+configure them for this repo. To update, re-copy from upstream or use `npx skills update`.
+Note: upstream's `code-review` skill shares its name with Claude Code's built-in `/code-review`.
