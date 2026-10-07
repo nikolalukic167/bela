@@ -24,5 +24,44 @@
   "bFellRate": 0.265,
   "cardDiff": 10.06,
   "seconds": 586.182
+ },
+ {
+  "a": "pimc:evidence=0",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 18.42,
+  "se": 1.38,
+  "aCallRate": 0.5,
+  "aFellRate": 0.161,
+  "bFellRate": 0.267,
+  "cardDiff": 8.94,
+  "seconds": 611.383
+ },
+ {
+  "a": "pimc:exact=0",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 16.95,
+  "se": 1.42,
+  "aCallRate": 0.5,
+  "aFellRate": 0.168,
+  "bFellRate": 0.263,
+  "cardDiff": 7.58,
+  "seconds": 22.485
+ },
+ {
+  "a": "pimc:samples=10",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 2000,
+  "meanDiff": 13.08,
+  "se": 1.43,
+  "aCallRate": 0.5,
+  "aFellRate": 0.189,
+  "bFellRate": 0.25,
+  "cardDiff": 6.83,
+  "seconds": 150.343
  }
 ]
