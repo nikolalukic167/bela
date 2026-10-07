@@ -18,6 +18,7 @@ npm run build      # type-check + production build into dist/
 ```
 src/core/          game-agnostic: cards, seeded RNG, GameDefinition interface, game registry
 src/games/bela/    pure Bela engine (rules, legality, declarations, scoring, bot) + ui/
+src/ratings/       OpenSkill player ratings: replay match history, leaderboard, predictions
 src/ui/            shared UI: SVG Card, Modal, useGame hook (bots, auto actions, persistence)
 src/pages/         Home (game picker), Play/:gameId, Rules/:gameId
 src/i18n/          Croatian / English strings
@@ -44,7 +45,11 @@ Only the card-table layout in `src/styles.css` is custom CSS.
 
 ## Online play
 
-See [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the phased plan.
+See [docs/architecture.md](docs/architecture.md) for the full architecture, priorities, security and code standards, and [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the first online phases.
+
+## Ratings
+
+See [docs/ratings.md](docs/ratings.md). Ratings are computed from an append-only match history and are meant to run server-side once online play exists.
 
 ## Hosting (GitHub Pages)
 
