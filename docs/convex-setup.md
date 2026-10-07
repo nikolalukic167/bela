@@ -47,7 +47,8 @@ In the Convex dashboard, open **Production → Settings → Environment Variable
 ## 5. Run the one-click auth setup
 1. Go to https://github.com/nikolalukic167/bela/actions/workflows/convex-auth-setup.yml.
 2. Click **Run workflow**, keep the defaults, and click **Run workflow**.
-3. This generates the sign-in signing keys (`JWT_PRIVATE_KEY`, `JWKS`) and sets `SITE_URL` on your Convex deployment. The keys never appear in logs.
+3. This generates the sign-in signing keys (`JWT_PRIVATE_KEY`, `JWKS`) and sets `SITE_URL` on your Convex deployment.
+   Values go to Convex through a private temp file and are masked, so they don't appear in the log, even when a step fails.
 
 ## 6. Deploy
 1. Go to https://github.com/nikolalukic167/bela/actions/workflows/deploy.yml.
@@ -60,6 +61,8 @@ In the Convex dashboard, open **Production → Settings → Environment Variable
 3. After Google, you land back on the same page, and the menu shows your name and picture.
 
 ## Troubleshooting
+- **"Not authorized" / "CONVEX_DEPLOY_KEY is a "preview" key":** the secret must be a **production** deploy key (it starts with `prod:`).
+  Switch the Convex dashboard to the **Production** deployment before generating it, then replace the GitHub secret and re-run.
 - **Google says `redirect_uri_mismatch`:** the redirect URI in step 3 must be exactly `https://<name>.convex.site/api/auth/callback/google`. Use `.site`, not `.cloud`.
 - **Google says "access blocked" or the app isn't verified:** publish the app or add yourself as a test user (step 3.2).
 - **You come back signed out:** check that `SITE_URL` is `https://nikolalukic167.github.io/bela` (no trailing slash) under Convex **Environment Variables**, and that `JWT_PRIVATE_KEY` and `JWKS` exist. If not, re-run step 5.
