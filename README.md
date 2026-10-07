@@ -38,7 +38,7 @@ Only the card-table layout in `src/styles.css` is custom CSS.
 
 ## Online play
 
-See [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the phased plan.
+See [docs/architecture.md](docs/architecture.md) for the full architecture, priorities, security and code standards, and [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the first online phases.
 
 ## Hosting (GitHub Pages)
 
