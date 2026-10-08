@@ -1,0 +1,138 @@
+// Pure table orchestration: no Convex imports besides types, so it is unit-tested directly.
+// The Convex entry points (tables.ts, admin.ts) only load/save around these functions.
+import type { Id } from '../_generated/dataModel';
+import { sameCard } from '../../src/core/cards';
+import { createRng } from '../../src/core/rng';
+import { belaGame } from '../../src/games/bela/game';
+import type { BelaAction, BelaOptions, BelaState } from '../../src/games/bela/state';
+import { viewFor, type SeatView } from '../../src/games/bela/view';
+import { CODE_ALPHABET, CODE_LENGTH } from './config';
+import { TableError } from './errors';
+
+export type ServerBotLevel = 'easy' | 'medium' | 'hard';
+/** 'expert' (PIMC, ~700 ms per move) exceeds Convex's mutation time limit, so it is offline-only. */
+export const SERVER_BOT_LEVELS: ServerBotLevel[] = ['easy', 'medium', 'hard'];
+
+export type Seat =
+  | { kind: 'empty' }
+  | { kind: 'user'; userId: Id<'users'>; name: string }
+  | { kind: 'bot'; name: string; level: ServerBotLevel; userId?: Id<'users'> };
+
+export const SEATS = 4;
+
+export const BOT_NAMES = ['Ana', 'Marko', 'Ivana', 'Luka', 'Petra', 'Josip', 'Mia', 'Ivan'];
+
+export function makeCode(randomInt: (max: number) => number): string {
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return code;
+}
+
+export function seatOf(seats: Seat[], userId: Id<'users'>): number {
+  return seats.findIndex((s) => s.kind === 'user' && s.userId === userId);
+}
+
+export const firstEmpty = (seats: Seat[]) => seats.findIndex((s) => s.kind === 'empty');
+export const humanCount = (seats: Seat[]) => seats.filter((s) => s.kind === 'user').length;
+
+export function emptySeats(): Seat[] {
+  return Array.from({ length: SEATS }, () => ({ kind: 'empty' as const }));
+}
+
+/** A bot with a name not yet used at the table. */
+export function botSeat(seats: Seat[], level: ServerBotLevel): Seat {
+  const taken = new Set(seats.flatMap((s) => (s.kind === 'empty' ? [] : [s.name])));
+  return { kind: 'bot', name: BOT_NAMES.find((n) => !taken.has(n)) ?? 'Bot', level };
+}
+
+/** Bots take every empty seat. */
+export function fillWithBots(seats: Seat[], level: ServerBotLevel): Seat[] {
+  const out = [...seats];
+  for (const [i, s] of out.entries()) if (s.kind === 'empty') out[i] = botSeat(out, level);
+  return out;
+}
+
+export function startState(options: BelaOptions, seed: number): BelaState {
+  return belaGame.setup(options, seed);
+}
+
+/** Who must move next, or what the server does by itself. */
+export type Mover =
+  | { kind: 'none' } // waiting for a human, or the game is over
+  | { kind: 'auto'; action: BelaAction } // collect a trick / deal the next hand at a bot-only table
+  | { kind: 'bot'; seat: number };
+
+export function moverOf(state: BelaState, seats: Seat[]): Mover {
+  if (belaGame.isOver(state)) return { kind: 'none' };
+  const auto = belaGame.autoAction(state);
+  if (auto) return { kind: 'auto', action: auto };
+  if (state.phase === 'handOver') {
+    // Any seated human presses "next"; with no humans the server deals on its own.
+    return humanCount(seats) === 0 ? { kind: 'auto', action: { type: 'next' } } : { kind: 'none' };
+  }
+  const turn = belaGame.currentPlayer(state);
+  if (turn === null) return { kind: 'none' };
+  return seats[turn]?.kind === 'bot' ? { kind: 'bot', seat: turn } : { kind: 'none' };
+}
+
+function sameAction(a: BelaAction, b: BelaAction): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === 'call' && b.type === 'call') return a.suit === b.suit;
+  if (a.type === 'play' && b.type === 'play') return sameCard(a.card, b.card);
+  return true;
+}
+
+/** Applies a human's action after checking seat, turn and legality. Throws TableError. */
+export function applyHumanAction(state: BelaState, seat: number, action: BelaAction): BelaState {
+  if (belaGame.isOver(state)) throw new TableError('WRONG_STATE');
+  if (action.type === 'collect') throw new TableError('ILLEGAL_ACTION'); // system action only
+  if (state.phase === 'handOver') {
+    if (action.type !== 'next') throw new TableError('ILLEGAL_ACTION');
+    return belaGame.apply(state, action);
+  }
+  if (belaGame.currentPlayer(state) !== seat) throw new TableError('NOT_YOUR_TURN');
+  if (!belaGame.legalActions(state, seat).some((l) => sameAction(l, action))) throw new TableError('ILLEGAL_ACTION');
+  return belaGame.apply(state, action);
+}
+
+/** The bot's move, decided from its seat's view only. */
+export function botAction(state: BelaState, seat: number, level: ServerBotLevel, rngSeed: number): BelaAction {
+  const view = viewFor(state, seat);
+  const leveled: SeatView = { ...view, options: { ...view.options, botLevel: level } };
+  return belaGame.bot(leveled, createRng(rngSeed));
+}
+
+export interface Move {
+  seat: number;
+  action: BelaAction;
+}
+
+/**
+ * Plays up to `max` server-driven moves (bots, trick collection, bot-only dealing).
+ * `version` makes bot randomness differ per move but stay reproducible.
+ */
+export function advance(state: BelaState, seats: Seat[], version: number, max: number): { state: BelaState; moves: Move[] } {
+  const moves: Move[] = [];
+  let s = state;
+  while (moves.length < max) {
+    const m = moverOf(s, seats);
+    if (m.kind === 'none') break;
+    let seat: number;
+    let action: BelaAction;
+    if (m.kind === 'auto') {
+      seat = belaGame.currentPlayer(s) ?? 0;
+      action = m.action;
+    } else {
+      const bot = seats[m.seat];
+      action = botAction(s, m.seat, bot.kind === 'bot' ? bot.level : 'medium', s.seed ^ Math.imul(version + moves.length + 1, 2654435761));
+      seat = m.seat;
+    }
+    s = belaGame.apply(s, action);
+    moves.push({ seat, action });
+  }
+  return { state: s, moves };
+}
+
+export function isFinished(state: BelaState): boolean {
+  return belaGame.isOver(state);
+}

@@ -16,7 +16,7 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 | # | Phase | Delivers | Depends on | Status |
 |---|---|---|---|---|
 | 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | mostly done (`src/games/bela`) |
-| 2 | **Accounts & private tables** | Google sign-in, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | auth scaffolded in `convex/` |
+| 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **in progress**: guests/username accounts, private tables, server-side bots, admin test tools built (see §15); reconnect timer, rated play and e2e still open |
 | 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
 | 5 | **Competitive** | Seasons/leagues, tournaments (round-robin, brackets), clubs, replays, achievements | 3, 4 | |
@@ -38,7 +38,7 @@ pages/ UI  ── useGame (local adapter)          convex/
 src/core/  GameDefinition  ◀──── imported ────▶   src/core + src/games/* (same engine)
 src/games/bela/  pure engine                      ratings.ts    OpenSkill, pure
                                                   scheduled fns bots, trick collect, timers
-Convex Auth (Google) ─────────────────────────▶   users, auth tables
+Convex Auth (guest / password / Google) ──────▶   users, auth tables
 ```
 
 - Frontend is static and holds **no secrets**. The Convex URL and Google client ID are public by design.
@@ -60,8 +60,11 @@ src/
   i18n/            strings (hr, en, ...); no literal user text in components
 convex/
   schema.ts        single source of truth for stored data
-  <domain>.ts      one file per domain: tables, users, ratings, friends, tournaments
-  lib/             auth guards, validators, rate limiting, error types
+  <domain>.ts      one file per domain: tables, users, admin, ratings (later), friends, tournaments
+  lib/             auth guards (requireUser/requireAdmin), tableLogic (pure orchestration), config, error codes
+tests/
+  server/          pure tests of convex/lib (no Convex runtime)
+  convex/          convex-test integration tests of the real functions (edge-runtime)
 docs/              architecture, ADRs, rules/<game>.md (spec the engine is tested against)
 ```
 
@@ -87,30 +90,31 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 
 ## 6. Data model (Convex)
 
-Defined in `convex/schema.ts`; every field validated by `v.*`. Sketch:
+Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are the first five rows; the rest is the plan.
 
 | Table | Key fields | Notes |
 |---|---|---|
-| `users` | auth fields, `displayName`, `avatar`, `country`, `city`, `locale`, `createdAt` | Public profile fields kept separate from email. |
-| `tables` | `code`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{userId}` \| `{bot}` \| empty), `rated`, `createdAt` | `rated` is set at start: false if any bot or if host chose friendly. |
-| `tableState` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. |
-| `actions` | `tableId`, `seq`, `seat`, `action`, `at` | Append-only; unique `(tableId, seq)`. |
-| `games` | `tableId`, `players`, `result`, `rated`, `endedAt`, `endReason` (normal/abandoned) | One row per finished match. |
-| `ratings` | `userId`, `scope` (`solo`\|`pair:<id>`), `mu`, `sigma`, `games` | OpenSkill (mu/sigma), not a single Elo number. |
-| `rating_history` | `ratingId`, `gameId`, `mu`, `sigma`, `at` | Feeds the rating graph. |
-| `pairs` | `userA`, `userB` (ordered), `status`, rating via `ratings` | Both must accept. |
-| `friendships`, `invites` | pair of users + status; code, expiry, uses | Invites expire and are single-purpose. |
+| `users` | auth fields, `isAnonymous` (guest), `isAdmin`, `isBot`, `isTest`; later `country`, `city`, `locale` | Our flags are optional so Convex Auth can create users. `isAdmin` is granted only from the Convex dashboard (§15). |
+| `tables` | `code`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
+| `tableStates` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. `version` is bumped per action; scheduled steps carry the version they expect, so a stale one is a no-op. |
+| `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
+| `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
+| `games` | `tableId`, `players`, `result`, `rated`, `endedAt`, `endReason` (normal/abandoned) | One row per finished match. Planned (phase 3). |
+| `ratings` | `userId`, `scope` (`solo`\|`pair:<id>`), `mu`, `sigma`, `games` | OpenSkill (mu/sigma), not a single Elo number. Planned. |
+| `rating_history` | `ratingId`, `gameId`, `mu`, `sigma`, `at` | Feeds the rating graph. Planned. |
+| `pairs` | `userA`, `userB` (ordered), `status`, rating via `ratings` | Both must accept. Planned. |
+| `friendships`, `invites` | pair of users + status; code, expiry, uses | Invites expire and are single-purpose. Planned. |
 | `leagues`, `tournaments`, `clubs` | later phases | Added with their phase, not before. |
 | `stats` | per-user aggregates | Derived; rebuildable from `games` + `actions`. |
 
-Indexing: every query path has an index (`by_code`, `by_user`, `by_table_seq`, `by_rating`). No unindexed `filter` on growing tables.
+Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_table_seq`, `by_test`, `by_rating`). No unindexed `filter` on growing tables.
 
 ## 7. Server design (Convex functions)
 
 - **Thin entry points, deep service.** `convex/tables.ts` holds `query`/`mutation` wrappers that do: authenticate → validate args → call a plain function in `tableService` → return. All game orchestration lives in `tableService` (plain TS taking a `ctx`-like port), so it can be unit-tested without Convex.
 - **Act flow** (`tables.act`): resolve caller → seat from the table (never from args) → check it is that seat's turn → check `action ∈ legalActions` → `apply` → append to `actions` → bump `version` (optimistic concurrency; retry on conflict) → schedule next system step.
 - **Scheduled functions** drive everything time-based: bot moves (with a small human-like delay), trick collection, turn timers, reconnect grace expiry, abandoned-table cleanup. All idempotent and version-checked: a stale timer is a no-op.
-- **Bots** decide from `view(seat)` only, through the same `bot(v, rng)` used offline. They are marked `{bot: true}` in seats and are excluded from rating updates (and make the game unrated).
+- **Bots** decide from `view(seat)` only, through the same `bot(v, rng)` used offline. Online tables offer easy / medium / hard: expert (PIMC, ~700 ms per move) would exceed Convex's mutation time limit, so it stays offline-only. A whole hard match costs about 75 ms of bot compute, so "fast" test tables play many moves per call. They are marked `{bot: true}` in seats and are excluded from rating updates (and make the game unrated).
 - **Reconnect:** a disconnected seat keeps its place. A timer (default 90 s, configurable per table) starts on disconnect; on expiry a bot takes over (friendly game continues) or the game ends as `abandoned` (rated game). Returning before expiry cancels the timer. An abandoning player in a rated game takes the loss; the others are not penalised.
 - **Ratings:** on game end, one mutation writes `games`, updates `ratings` and appends `rating_history`, atomically. Only rated games with four humans (or the pair rule) qualify. Rating maths lives in `src/ratings/` as pure functions with tests.
 - **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`); the client maps them to translated messages. Never leak internal state in an error.
@@ -138,7 +142,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table_seq`, `
 - Rating abuse: friendlies and bot games are unrated; rated games need distinct accounts; per-opponent daily rating-gain cap against win-trading; account-age/games-played gate for leaderboards.
 
 ### 9.2 Authentication & sessions
-- Google OAuth via Convex Auth. Secrets (`AUTH_GOOGLE_SECRET`, JWT keys, `CONVEX_DEPLOY_KEY`) live only in Convex dashboard / GitHub Actions secrets. Never in the repo, logs, or client bundle. (`scripts/convex-auth-setup.mjs` already refuses to log them.)
+- Three ways in, all via Convex Auth, none required for local play: **guest** (display name only, session lives in the browser), **username + password** (persistent, no email, see §15) and **Google OAuth**. Secrets (`AUTH_GOOGLE_SECRET`, JWT keys, `CONVEX_DEPLOY_KEY`) live only in Convex dashboard / GitHub Actions secrets. Never in the repo, logs, or client bundle. (`scripts/convex-auth-setup.mjs` already refuses to log them.)
 - Every mutation and every non-public query starts with an auth guard from `convex/lib/auth.ts` (`requireUser(ctx)`); there is no function that skips it by accident. Public queries are listed explicitly (e.g. public leaderboard).
 - Authorisation is checked per object: host-only actions (start, kick, change options), member-only reads, owner-only profile edits.
 - Account deletion endpoint (GDPR: players in HR/DE/AT/CH are in the EU/EEA or Swiss regime): deletes or anonymises profile, keeps anonymised game records for other players' histories.
@@ -153,7 +157,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table_seq`, `
 ### 9.4 Abuse & privacy
 - Rate limits on table creation, invites, friend requests, name changes.
 - Block/mute and report for users; moderation actions logged. Offensive-name filter at profile save.
-- Store the minimum personal data: Google name, avatar, email (for account recovery, never shown). Region is self-declared, coarse (country/city), optional.
+- Store the minimum personal data: display name, and for Google users avatar and email (never shown). Username accounts store no real email at all, so they have **no password recovery** (a known trade-off, revisit with email verification). Region is self-declared, coarse (country/city), optional.
 - No third-party trackers in v1. If analytics are added: cookieless, aggregate, disclosed in a privacy page.
 
 ### 9.5 Web & supply chain
@@ -183,7 +187,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table_seq`, `
 | Determinism | Vitest | Same seed + log ⇒ identical state; replay of stored games in CI. |
 | Bots | Vitest | N simulated matches complete without illegal moves (exists: 200). |
 | View leakage | Vitest | See 9.1. Release gate. |
-| Server | `convex-test` | Not-your-turn, illegal action, wrong seat, double-submit, stale version, reconnect/abandon timers, rating update atomicity, authorisation for host-only actions. |
+| Server | `convex-test` (in `tests/convex`) | Not-your-turn, illegal action, wrong seat, double-submit, stale version, reconnect/abandon timers, rating update atomicity, authorisation for host-only actions. |
 | Ratings | Vitest | Known OpenSkill cases; bot/unrated games change nothing; abandon handling. |
 | E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. |
 | UI | Vitest + Testing Library (sparingly) | Language switch, legal-card hints, accessibility smoke. |
@@ -206,9 +210,28 @@ CI (`.github/workflows`): typecheck → lint → unit tests → build → (on `m
 
 ## 14. Open decisions (record as ADRs when settled)
 
-1. Display names: Google name by default, editable? Uniqueness rules?
+1. Display names: guests and username accounts pick their own (2–24 chars, not unique; `users.rename` exists, no UI yet). Google name by default for Google users? Uniqueness rules? Offensive-name filter?
 2. Do signed-in local games against bots count for personal stats (unrated)?
 3. Reconnect grace default and turn-timer defaults per mode (quick vs long game).
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
 5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
 6. When (if ever) to open a public lobby; minimum concurrent-player threshold.
+
+## 15. Guests, test data and the admin panel
+
+Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username-accounts.md).
+
+**Accounts without Google.** `convex/auth.ts` registers the Anonymous provider (guest: name only) and the Password provider (username + password). Convex Auth's Password provider identifies accounts by "email", so a username maps to the reserved, non-routable address `<username>@users.karte.invalid` (`src/account/username.ts`); `profile()` rejects any other address, so real emails can't be used and nothing is ever sent. Guest sessions end when the browser's storage is cleared; the sign-in dialog offers a username account for people who want to keep their identity.
+
+**Tables.** `convex/tables.ts` holds thin entry points; `convex/lib/tableLogic.ts` is the pure orchestration (who moves next, validating a human action, advancing bots), tested without Convex. Flow: `create` → friends `join` by code or link → host `addBot` / `clearSeat` / `start` (empty seats get bots) → `act` for humans, scheduled `step` for bots and trick collection. `watch` is the one read: the caller's `viewFor` seat projection, seat names and lobby info, never the stored state. Leaving a running game replaces the player with a bot. Humans can press "next hand"; a bot-only table deals by itself.
+
+**Test data and bots in an admin panel.**
+- `/admin` is hidden: no link except in the menu of users with `isAdmin`, and a non-admin who opens the URL is redirected home. The real protection is server-side: every function in `convex/admin.ts` starts with `requireAdmin`, which answers `NOT_FOUND` to everyone else.
+- Nobody becomes admin through the app. Sign up with a username, then run `admin:setAdmin` with `{ "username": "…", "admin": true }` in the Convex dashboard (Functions → Run). It is an `internalMutation`, unreachable from clients.
+- Everything the panel creates is flagged `isTest` (tables, bot accounts). Real-user queries never return test tables: `watch` answers `null`, `join` and `act` answer `NOT_FOUND`, `mine` omits them. Admins can spectate bot-only test tables from seat 0 and nothing else; at a real table an admin sees no cards.
+- Tools: **Seed** (6 bot accounts, an open lobby to join, one live bot match, two finished ones), **Start a bot match** (level, live or fast, target), **Delete test data** (removes only `isTest` rows, including their action logs).
+- The panel is English-only: it is an internal tool, an explicit exception to the i18n rule in §8.
+
+**Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 6 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`. Names are validated server-side (2–24 chars, no control characters).
+
+**Not yet built (phase 2 remainder):** disconnect detection and the reconnect grace timer (a seat is currently held until the player leaves), turn timers, rematch, rated play, Playwright e2e with two browser contexts.

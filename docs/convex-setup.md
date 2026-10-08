@@ -1,4 +1,6 @@
-# Setting up Convex + Google sign-in
+# Setting up Convex + sign-in
+
+Guest and username + password sign-in need **no Google setup**: do steps 1, 2, 5 (skip the Google variables) and 6, and skip step 3 and 4. Google (steps 3 and 4) is optional.
 
 About 15 minutes, one time. Everything happens in three web dashboards. You don't need anything installed locally.
 Dashboard labels change now and then; if a name differs slightly, look for the closest match.
@@ -67,3 +69,8 @@ In the Convex dashboard, open **Production → Settings → Environment Variable
 - **Google says "access blocked" or the app isn't verified:** publish the app or add yourself as a test user (step 3.2).
 - **You come back signed out:** check that `SITE_URL` is `https://nikolalukic167.github.io/bela` (no trailing slash) under Convex **Environment Variables**, and that `JWT_PRIVATE_KEY` and `JWKS` exist. If not, re-run step 5.
 - **The menu still says "Prijava · Uskoro":** the site was built without Convex. Re-run step 6 and check that the deploy log shows `convex deploy`.
+
+## 8. Make yourself admin (optional, for the hidden test panel)
+1. On the site, open ☰ → Sign in → **Account**, and create an account with a username (for example `nikola`).
+2. In the Convex dashboard, open **Production → Functions**, pick `admin:setAdmin`, click **Run function** and use `{ "username": "nikola", "admin": true }`.
+3. Reload the site. ☰ → Account now shows **Admin**. It seeds test data, runs bot matches and deletes the test data again. Nobody else sees it.
