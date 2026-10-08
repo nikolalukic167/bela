@@ -177,3 +177,52 @@ describe('playing', () => {
     expect(mine[0]).toMatchObject({ status: 'playing', players: 2 });
   });
 });
+
+describe('history', () => {
+  async function finishedTable(patch: { isTest?: boolean } = {}) {
+    const t = newBackend();
+    const host = await signUp(t, 'Host');
+    const friend = await signUp(t, 'Friend');
+    const c = await host.as.mutation(api.tables.create, { options: OPTIONS });
+    await friend.as.mutation(api.tables.join, { code: c });
+    await host.as.mutation(api.tables.start, { code: c });
+    await t.run(async (ctx) => {
+      const table = await ctx.db.query('tables').withIndex('by_code', (q) => q.eq('code', c)).unique();
+      await ctx.db.patch(table!._id, { status: 'finished', result: { scores: [520, 410], winner: 0 }, finishedAt: 5000, ...patch });
+    });
+    return { t, host, friend, c };
+  }
+
+  it('lists a finished match from each player\'s own side, with partner first', async () => {
+    const { host, friend, c } = await finishedTable();
+    const [h] = await host.as.query(api.tables.history, {});
+    expect(h).toMatchObject({ id: `online:${c}`, source: 'online', target: 501, scores: [520, 410], won: true, playedAt: 5000 });
+    expect(h.players).toHaveLength(3);
+    expect(h.players).not.toContain('Host');
+    const [f] = await friend.as.query(api.tables.history, {});
+    expect(f).toMatchObject({ scores: [410, 520], won: false });
+    expect(f.players[0]).not.toBe('Host'); // Friend's partner is a bot, the host is an opponent
+    expect(f.players).toContain('Host');
+  });
+
+  it('leaves out unfinished tables, test tables and other people\'s games', async () => {
+    const { t, host } = await finishedTable({ isTest: true });
+    expect(await host.as.query(api.tables.history, {})).toEqual([]);
+    const stranger = await signUp(t, 'Stranger');
+    expect(await stranger.as.query(api.tables.history, {})).toEqual([]);
+    const live = await signUp(t, 'Live');
+    await live.as.mutation(api.tables.create, { options: OPTIONS });
+    expect(await live.as.query(api.tables.history, {})).toEqual([]);
+  });
+
+  it('requires a signed-in user', async () => {
+    const { t } = await finishedTable();
+    await failsWith(t.query(api.tables.history, {}), 'UNAUTHENTICATED');
+  });
+
+  it('never exposes the game state', async () => {
+    const { host } = await finishedTable();
+    const json = JSON.stringify(await host.as.query(api.tables.history, {}));
+    for (const secret of ['seed', 'hand', 'talon', 'deck', 'actions']) expect(json).not.toContain(secret);
+  });
+});

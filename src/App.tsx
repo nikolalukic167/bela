@@ -4,6 +4,7 @@ import { I18nProvider } from './i18n/i18n';
 import { AdminPage } from './admin/AdminPage';
 import { OnlineLobbyPage } from './online/OnlineLobby';
 import { OnlineTablePage } from './online/OnlineTable';
+import { History } from './pages/History';
 import { Home } from './pages/Home';
 import { Play } from './pages/Play';
 import { Rules } from './pages/Rules';
@@ -21,6 +22,7 @@ export function App() {
               <Route path="/rules/:gameId" element={<Rules />} />
               <Route path="/online" element={<OnlineLobbyPage />} />
               <Route path="/t/:code" element={<OnlineTablePage />} />
+              <Route path="/history" element={<History />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Home />} />
             </Routes>

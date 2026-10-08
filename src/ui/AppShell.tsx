@@ -122,6 +122,13 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
           <li>
             <h2 className="menu-title">{t('menu.account')}</h2>
             <AccountMenu onDone={close} onSignIn={() => setSigningIn(true)} />
+            <ul>
+              <li>
+                <NavLink to="/history" onClick={close}>
+                  {t('menu.history')}
+                </NavLink>
+              </li>
+            </ul>
           </li>
 
           <li>

@@ -10,6 +10,7 @@ import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
 import { useGame } from '../../../ui/useGame';
 import { HUMAN_SEAT } from '../engine';
 import { belaGame } from '../game';
+import { recordLocal, saveLocalGame } from '../history';
 import type { BelaAction, BelaOptions } from '../state';
 import type { SeatView } from '../view';
 import { HandSummary } from './HandSummary';
@@ -42,6 +43,10 @@ export function BelaTable() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [lastOptions, setLastOptions] = useState<BelaOptions>(belaGame.defaultOptions);
+  const finished = view?.phase === 'matchOver' ? view : null;
+  useEffect(() => {
+    if (finished) saveLocalGame(recordLocal(finished, Date.now()));
+  }, [finished?.handNo, finished?.scores[0], finished?.scores[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = (o: BelaOptions) => {
     setLastOptions(o);

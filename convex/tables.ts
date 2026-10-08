@@ -107,7 +107,7 @@ export async function commit(
   await ctx.db.patch(row._id, { state, version });
   const next = { ...row, state, version };
   if (isFinished(state)) {
-    await ctx.db.patch(table._id, { status: 'finished', result: { scores: [...state.scores], winner: state.winner ?? 0 } });
+    await ctx.db.patch(table._id, { status: 'finished', result: { scores: [...state.scores], winner: state.winner ?? 0 }, finishedAt: Date.now() });
     return;
   }
   await scheduleNext(ctx, table, next);
@@ -361,5 +361,34 @@ export const mine = query({
       });
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+/** The caller's finished matches, newest first, from the caller's side of the table. Public facts only. */
+export const history = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const rows = await ctx.db.query('memberships').withIndex('by_user', (q) => q.eq('userId', user._id)).collect();
+    const out = [];
+    for (const m of rows) {
+      const t = await ctx.db.get(m.tableId);
+      if (!t || t.isTest || t.status !== 'finished' || !t.result) continue;
+      const seats = t.seats as Seat[];
+      const mine = seatOf(seats, user._id);
+      if (mine < 0) continue;
+      const team = mine % 2;
+      const name = (seat: number) => (seats[seat].kind === 'empty' ? '' : (seats[seat] as { name: string }).name);
+      out.push({
+        id: `online:${t.code}`,
+        playedAt: t.finishedAt ?? t.createdAt,
+        source: 'online' as const,
+        target: t.options.target,
+        scores: [t.result.scores[team], t.result.scores[1 - team]] as [number, number],
+        won: t.result.winner === team,
+        players: [name((mine + 2) % 4), name((mine + 1) % 4), name((mine + 3) % 4)],
+      });
+    }
+    return out.sort((a, b) => b.playedAt - a.playedAt);
   },
 });

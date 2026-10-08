@@ -59,6 +59,8 @@ export default defineSchema({
     /** Final scores [team 0, team 1] once finished. */
     result: v.optional(v.object({ scores: v.array(v.number()), winner: v.number() })),
     createdAt: v.number(),
+    /** When the match ended; older rows fall back to createdAt. */
+    finishedAt: v.optional(v.number()),
   })
     .index('by_code', ['code'])
     .index('by_host', ['hostId'])
