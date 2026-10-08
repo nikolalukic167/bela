@@ -53,6 +53,8 @@ export interface SeatView {
   declarations: { team: number; declarations: Declaration[] } | null;
   /** Cards from completed tricks this hand. */
   played: Card[];
+  /** Completed tricks this hand with who played each card (public). */
+  tricks: Played[][];
   tricksTaken: [number, number];
   scores: [number, number];
   history: HandResult[];
@@ -94,6 +96,7 @@ export function viewFor(s: BelaState, seat: number): SeatView {
         ? { team, declarations: s.declarations.filter((d) => d.seat % 2 === team && d.kind !== 'belot') }
         : null,
     played: s.played,
+    tricks: s.tricks ?? [],
     tricksTaken: s.tricksTaken,
     scores: s.scores,
     history: s.history,

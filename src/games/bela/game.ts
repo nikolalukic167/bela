@@ -1,12 +1,12 @@
 import type { GameDefinition } from '../../core/game';
-import { chooseAction } from './bot';
+import { levelBot } from './bots';
 import { apply, autoAction, currentPlayer, legalActions, setup } from './engine';
 import { DEFAULT_RULES, type BelaAction, type BelaOptions, type BelaState } from './state';
 import { viewFor, type SeatView } from './view';
 
 export const belaGame: GameDefinition<BelaState, BelaAction, BelaOptions, SeatView> = {
   id: 'bela',
-  defaultOptions: { target: 1001, direction: 'ccw', ...DEFAULT_RULES },
+  defaultOptions: { target: 1001, direction: 'ccw', ...DEFAULT_RULES, botLevel: 'medium' },
   setup,
   currentPlayer,
   legalActions,
@@ -14,5 +14,5 @@ export const belaGame: GameDefinition<BelaState, BelaAction, BelaOptions, SeatVi
   autoAction,
   isOver: (s) => s.phase === 'matchOver',
   view: viewFor,
-  bot: chooseAction,
+  bot: levelBot,
 };

@@ -1,0 +1,54 @@
+[
+ {
+  "a": "ismcts",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 1000,
+  "meanDiff": 21.01,
+  "se": 2.05,
+  "aCallRate": 0.5,
+  "aFellRate": 0.17,
+  "bFellRate": 0.28,
+  "cardDiff": 11.15,
+  "seconds": 194.099
+ },
+ {
+  "a": "ismcts:iters=800",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 1000,
+  "meanDiff": 19.45,
+  "se": 2.03,
+  "aCallRate": 0.5,
+  "aFellRate": 0.18,
+  "bFellRate": 0.282,
+  "cardDiff": 9.9,
+  "seconds": 60.184
+ },
+ {
+  "a": "ismcts",
+  "b": "pimc",
+  "mode": "hands",
+  "hands": 1000,
+  "meanDiff": 1.65,
+  "se": 2.02,
+  "aCallRate": 0.5,
+  "aFellRate": 0.214,
+  "bFellRate": 0.218,
+  "cardDiff": 1.7,
+  "seconds": 541.828
+ },
+ {
+  "a": "ismcts:evidence=0",
+  "b": "tracker",
+  "mode": "hands",
+  "hands": 1000,
+  "meanDiff": 20,
+  "se": 2.09,
+  "aCallRate": 0.5,
+  "aFellRate": 0.178,
+  "bFellRate": 0.288,
+  "cardDiff": 9.68,
+  "seconds": 99.225
+ }
+]
