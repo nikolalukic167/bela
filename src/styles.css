@@ -98,20 +98,10 @@ button.playing-card:disabled { cursor: default; }
 button.playing-card:focus-visible { outline: 3px solid var(--color-warning); outline-offset: 2px; }
 
 /* ---------- Opponents ---------- */
-.opponent { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; flex-direction: column; }
+.opponent { min-width: 0; display: flex; align-items: center; justify-content: center; }
 .opponent--top { grid-area: top; }
 .opponent--left { grid-area: left; }
 .opponent--right { grid-area: right; }
-.opp-cards { display: flex; }
-.opp-card { width: var(--ocw); }
-.opp-card + .opp-card { margin-left: calc(var(--ocw) * -0.7); }
-.opponent--left .opp-cards, .opponent--right .opp-cards { flex-direction: column; }
-.opponent--left .opp-card + .opp-card, .opponent--right .opp-card + .opp-card { margin-left: 0; margin-top: calc(var(--ocw) * -1.15); }
-.opp-count { display: none; }
-@media (max-width: 520px) {
-  .opponent--left .opp-cards, .opponent--right .opp-cards { display: none; }
-  .opponent--left .opp-count, .opponent--right .opp-count { display: inline-flex; }
-}
 
 /* ---------- Trick ---------- */
 .trick {
@@ -154,8 +144,10 @@ button.playing-card:focus-visible { outline: 3px solid var(--color-warning); out
 @media (min-width: 700px) {
   .hand { --visible: 0.72; }
 }
-.hand--active .playing-card--disabled { opacity: 0.45; filter: grayscale(0.4) drop-shadow(0 1px 2px rgb(0 0 0 / 0.4)); }
-.playing-card--selected { transform: translateY(-20%); }
+/* Legal cards are lit and lifted, the rest are dimmed (concept: gold ring, #8FA39A face). */
+.hand--active .playing-card--disabled { filter: brightness(0.62) saturate(0.45) drop-shadow(0 1px 2px rgb(0 0 0 / 0.4)); }
+.hand--active button.hand-card:not(:disabled) { outline: 2px solid var(--color-primary); outline-offset: -1px; transform: translateY(-10%); }
+.hand--active button.hand-card.playing-card--selected { transform: translateY(-22%); }
 @media (hover: hover) and (pointer: fine) {
   .hand--active button.hand-card:not(:disabled):hover { transform: translateY(-14%); }
 }

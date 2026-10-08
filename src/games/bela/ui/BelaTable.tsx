@@ -124,15 +124,21 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
   return (
     <SeatNames.Provider value={names ?? null}>
       <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
-        <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_220px]">
+        <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
           <Table view={view} onAct={spectating ? () => undefined : onAct} />
-          <aside className="hidden lg:block p-3 pl-0">
-            <div className="card bg-base-300 shadow-md">
-              <div className="card-body p-3">
-                <h3 className="card-title text-base">{t('score.sheet')}</h3>
-                <ScoreSheet view={view} />
-              </div>
+          <aside className="hidden lg:flex flex-col gap-4 bg-base-300 p-6">
+            <div className="flex items-end justify-between">
+              {view.trump ? <TrumpTile view={view} large /> : <span />}
+              {(view.phase === 'play' || view.phase === 'collect') && (
+                <div className="text-right">
+                  <div className="text-xs font-bold uppercase tracking-widest text-base-content/70">{t('table.trick')}</div>
+                  <div className="font-display text-3xl font-extrabold leading-tight">
+                    {Math.min(8, view.tricks.length + 1)} {t('table.of')} 8
+                  </div>
+                </div>
+              )}
             </div>
+            <ScoreSheet view={view} />
           </aside>
         </div>
 
@@ -156,13 +162,39 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
 
 function ScoreBar({ view }: { view: SeatView }) {
   const { t } = useI18n();
+  const tile = (label: string, score: number) => (
+    <div className="flex min-w-14 flex-col items-center rounded-xl bg-base-200 px-3 py-0.5 leading-tight">
+      <span className="text-[10px] font-bold uppercase tracking-wide text-base-content/70">{label}</span>
+      <strong className="font-display text-lg tabular-nums">{score}</strong>
+    </div>
+  );
   return (
     <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-      <div className="flex items-baseline gap-1.5 text-sm whitespace-nowrap" aria-live="polite">
-        {t('team.us')} <strong className="text-lg text-primary tabular-nums">{view.scores[0]}</strong>
-        <span className="opacity-50">:</span>
-        <strong className="text-lg text-primary tabular-nums">{view.scores[1]}</strong> {t('team.them')}
+      <div className="flex gap-2" aria-live="polite">
+        {tile(t('team.us'), view.scores[0])}
+        {tile(t('team.them'), view.scores[1])}
       </div>
+      {view.trump && (
+        <div className="lg:hidden">
+          <TrumpTile view={view} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The called suit, always on screen (navbar on phones, sidebar on desktop). */
+function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
+  const { t } = useI18n();
+  if (!view.trump) return null;
+  return (
+    <div
+      className={`flex flex-col items-center rounded-xl bg-[#fbfaf5] text-neutral leading-none ${large ? 'px-5 py-2' : 'min-w-14 px-3 py-1'}`}
+      role="status"
+      aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}`}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
+      <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}>{SUIT_SYMBOL[view.trump]}</span>
     </div>
   );
 }
@@ -223,7 +255,22 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
             <Card key={`talon${i}`} faceDown className="hand-card hand-card--talon" />
           ))}
         </div>
-        {playing && view.isMyTurn && <p className="your-turn text-sm font-bold text-warning">{t('status.yourTurn')}</p>}
+        {playing && view.isMyTurn && <p className="your-turn text-sm font-bold text-primary">{t('status.yourTurn')}</p>}
+        {playing && view.isMyTurn && !canHover() && (
+          <div className="flex w-full max-w-md items-center justify-between gap-3 px-3">
+            <span className="text-xs text-base-content/70">{t('table.tapHint')}</span>
+            <button type="button" className="btn btn-primary" disabled={!selected} onClick={() => selected && onAct({ type: 'play', card: selected })}>
+              {t('table.play')}
+              {selected && (
+                <>
+                  {' '}
+                  {selected.rank}
+                  <span className={`suit suit--${selected.suit}`}>{SUIT_SYMBOL[selected.suit]}</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </section>
 
       {view.phase === 'trump' && view.isMyTurn && <TrumpPicker view={view} onAct={onAct} />}
@@ -233,17 +280,31 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
 
 function Opponent({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
+  const names = useContext(SeatNames);
   const pos = positionOf(seat, view.options, view.seat);
-  const count = view.seats[seat].cardCount;
+  const info = view.seats[seat];
+  const name = names?.[seat] ?? t(SEAT_NAME[pos]);
+  let note = `${info.cardCount} ${t('table.cards')}`;
+  if (info.passed) note = t('status.passed');
+  else if (info.isTurn) note = t('status.thinking');
+  const side = pos !== 'top';
   return (
     <section className={`opponent opponent--${pos}`} aria-label={t(SEAT_NAME[pos])}>
-      <div className="opp-cards" aria-hidden="true">
-        {Array.from({ length: count }, (_, i) => (
-          <Card key={i} faceDown className="opp-card" />
-        ))}
+      <div
+        className={`flex min-w-0 items-center gap-2 rounded-2xl bg-base-300 p-2 ${side ? 'w-16 flex-col text-center' : 'px-3.5'} ${info.isTurn ? 'ring-2 ring-primary' : ''}`}
+      >
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary font-bold text-primary-content" aria-hidden="true">
+          {name.charAt(0).toUpperCase()}
+        </span>
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-sm font-bold">
+            {name}
+            {info.isDealer && <sup className="ml-0.5 text-[10px] opacity-70" title="dealer">D</sup>}
+          </span>
+          <span className="truncate text-xs text-base-content/70">{note}</span>
+          {info.bela && <span className="badge badge-xs badge-error mt-0.5 self-center">{t('decl.bela')}</span>}
+        </span>
       </div>
-      <span className="opp-count badge badge-neutral">{count}</span>
-      <SeatBubble view={view} seat={seat} />
     </section>
   );
 }
@@ -273,34 +334,68 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
 
 function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
+  const names = useContext(SeatNames);
+  const count = (suit: Suit) => view.hand.filter((c) => c.suit === suit).length;
+  // Others first as they sit around the table, then us; the call goes to whoever is up.
+  const order = [view.seat, ...view.seats.map((x) => x.seat).filter((x) => x !== view.seat)];
+  const status = (seat: number) => {
+    const info = view.seats[seat];
+    if (info.passed) return { text: t('status.passed'), mine: false };
+    if (info.isTurn) return seat === view.seat ? { text: t('trump.yourCall'), mine: true } : { text: t('status.thinking'), mine: false };
+    if (info.isDealer) return { text: t('trump.cannotPass'), mine: false };
+    return { text: '', mine: false };
+  };
   return (
     <div
-      className="trump-panel card bg-base-300 shadow-xl absolute left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2 z-10 w-[min(360px,calc(100%-32px))]"
+      className="trump-panel card bg-base-300 shadow-xl absolute inset-x-3 top-3 z-10 mx-auto max-w-md"
       role="dialog"
       aria-label={t('trump.title')}
     >
-      <div className="card-body p-4">
-        <h2 className="card-title justify-center">{t('trump.title')}</h2>
+      <div className="card-body gap-3 p-4">
+        <h2 className="card-title font-display text-2xl font-extrabold">{t('trump.title')}</h2>
+        <p className="text-sm text-base-content/75">{t('trump.helper')}</p>
         {view.mustCall && <div className="alert alert-warning alert-soft py-2">{t('trump.forced')}</div>}
+        <ul className="flex flex-col gap-1.5">
+          {order.map((seat) => {
+            const st = status(seat);
+            const name = seat === view.seat ? t('seat.you') : (names?.[seat] ?? t(SEAT_NAME[positionOf(seat, view.options, view.seat)]));
+            return (
+              <li
+                key={seat}
+                className={`flex justify-between rounded-xl px-3 py-2 text-sm ${st.mine ? 'border border-primary bg-base-200' : 'bg-base-100'}`}
+              >
+                <span className="font-bold">
+                  {name}
+                  {view.seats[seat].isDealer && <span className="font-normal opacity-70"> ({t('trump.dealer')})</span>}
+                </span>
+                <span className={st.mine ? 'font-bold text-primary' : 'opacity-70'}>{st.text}</span>
+              </li>
+            );
+          })}
+        </ul>
         <div className="grid grid-cols-4 gap-2">
-          {SUITS.map((suit) => (
-            <button
-              key={suit}
-              type="button"
-              className="trump-btn btn btn-outline h-auto flex-col gap-0 py-2 bg-white text-neutral hover:bg-base-200"
-              onClick={() => onAct({ type: 'call', suit })}
-            >
-              <span className={`suit suit--${suit} text-3xl leading-none`}>{SUIT_SYMBOL[suit]}</span>
-              <span className="text-xs font-normal">{t(`suit.${suit}` as StringKey)}</span>
-            </button>
-          ))}
+          {SUITS.map((suit) => {
+            const n = count(suit);
+            return (
+              <button
+                key={suit}
+                type="button"
+                className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white"
+                onClick={() => onAct({ type: 'call', suit })}
+              >
+                <span className={`suit suit--${suit} text-3xl leading-none`}>{SUIT_SYMBOL[suit]}</span>
+                <span className="text-xs font-medium">
+                  {n} {t(n === 1 ? 'trump.count1' : 'trump.countN')}
+                </span>
+                <span className="sr-only">{t(`suit.${suit}` as StringKey)}</span>
+              </button>
+            );
+          })}
         </div>
         {!view.mustCall && (
-          <div className="card-actions justify-end">
-            <button type="button" className="btn btn-ghost" onClick={() => onAct({ type: 'pass' })}>
-              {t('trump.pass')}
-            </button>
-          </div>
+          <button type="button" className="btn btn-outline h-12 rounded-2xl border-accent" onClick={() => onAct({ type: 'pass' })}>
+            {t('trump.pass')}
+          </button>
         )}
       </div>
     </div>
@@ -313,20 +408,9 @@ function HandInfo({ view }: { view: SeatView }) {
   const [open, setOpen] = useState(false);
   const decl = view.declarations;
   useEffect(() => setOpen(false), [view.handNo]);
-  if (!view.trump && !decl) return null;
+  if (!decl) return null;
   return (
     <div className="absolute left-2 top-2 z-[5] flex flex-col items-start gap-1.5">
-      {view.trump && view.callerSeat !== null && (
-        <div
-          className="flex flex-col items-center rounded-box bg-white text-neutral shadow-lg px-2.5 py-1 leading-none"
-          role="status"
-          aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
-          <span className={`suit suit--${view.trump} text-4xl leading-none`}>{SUIT_SYMBOL[view.trump]}</span>
-          <span className="text-[10px] opacity-70">{t(SEAT_NAME[positionOf(view.callerSeat, view.options, view.seat)])}</span>
-        </div>
-      )}
       {decl && (
         <>
           <button type="button" className="btn btn-xs btn-warning shadow-md" aria-expanded={open} onClick={() => setOpen(!open)}>
