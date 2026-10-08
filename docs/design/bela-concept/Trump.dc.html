@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bela Call Trump</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'DM Sans',sans-serif}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #123D2F; color: #E8F0EA; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 20px 16px 12px; display: flex; align-items: center; justify-content: space-between; background: #0C2A20">
+<a href="Main.dc.html" aria-label="Leave table" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#E8F0EA" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div style="font-size: 16px; font-weight: 700">Hand 4 · Us 312, Them 287</div>
+<div style="width: 44px"></div>
+</div>
+<div style="padding: 24px 20px 0; display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 34px; line-height: 1.05">Call trump</h1>
+<div style="font-size: 15px; color: #B7CCC0; line-height: 1.45">You see six cards now. The last two from the talon join them after the call.</div>
+</div>
+<div style="padding: 20px 20px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; background: #0C2A20; border-radius: 12px; padding: 12px 14px; font-size: 14px"><span style="font-weight: 700">Ivo</span><span style="color: #9DB5A8">Passed</span></div>
+<div style="display: flex; justify-content: space-between; background: #0C2A20; border-radius: 12px; padding: 12px 14px; font-size: 14px"><span style="font-weight: 700">Marta</span><span style="color: #9DB5A8">Passed</span></div>
+<div style="display: flex; justify-content: space-between; background: #17493A; border: 1px solid #E7B84B; border-radius: 12px; padding: 12px 14px; font-size: 14px"><span style="font-weight: 700">You</span><span style="color: #E7B84B; font-weight: 700">Your call</span></div>
+<div style="display: flex; justify-content: space-between; background: #0C2A20; border-radius: 12px; padding: 12px 14px; font-size: 14px"><span style="font-weight: 700">Ana (dealer)</span><span style="color: #9DB5A8">Waiting, cannot pass</span></div>
+</div>
+<div style="padding: 20px 20px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{suits}}" as="s" hint-placeholder-count="4">
+<button style="{{s.style}}"><span style="font-size: 32px; line-height: 1">{{s.glyph}}</span><span style="font-size: 13px; font-weight: 500">{{s.count}}</span></button>
+</sc-for>
+</div>
+<div style="padding: 12px 20px 0">
+<button style="width: 100%; min-height: 48px; border-radius: 14px; border: 1px solid #3F7A66; background: transparent; color: #E8F0EA; font-family: inherit; font-size: 16px; font-weight: 700">Pass</button>
+</div>
+<div style="flex: 1"></div>
+<div style="background: #0C2A20; padding: 16px 16px 32px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #9DB5A8; font-weight: 700">Your first six</div>
+<div style="position: relative; height: 88px">
+<sc-for list="{{hand}}" as="c" hint-placeholder-count="6">
+<div style="{{c.style}}"><span>{{c.rank}}</span><span style="font-size: 20px">{{c.suit}}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const S = { s: '♠︎', h: '♥︎', d: '♦︎', c: '♣︎' };
+const cards = [['A', 's'], ['10', 's'], ['9', 's'], ['K', 'h'], ['Q', 'h'], ['7', 'c']];
+const hand = cards.map((x, i) => {
+const red = x[1] === 'h' || x[1] === 'd';
+return {
+rank: x[0],
+suit: S[x[1]],
+style: 'position:absolute;left:' + (i * 54) + 'px;top:4px;width:56px;height:84px;border-radius:8px;box-sizing:border-box;padding:6px 7px;font-weight:700;font-size:18px;line-height:1;display:flex;flex-direction:column;background:#FBFAF5;box-shadow:0 3px 8px rgba(0,0,0,0.4);color:' + (red ? '#C23A2E' : '#14201B') + ';'
+};
+});
+const counts = { s: 3, h: 2, d: 0, c: 1 };
+const suits = ['s', 'h', 'd', 'c'].map((k) => {
+const red = k === 'h' || k === 'd';
+const strong = k === 's';
+return {
+glyph: S[k],
+count: counts[k] + (counts[k] === 1 ? ' card' : ' cards'),
+style: 'min-height:88px;border-radius:16px;border:' + (strong ? '2px solid #E7B84B' : '0') + ';background:#FBFAF5;color:' + (red ? '#C23A2E' : '#14201B') + ';font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;'
+};
+});
+return { hand, suits };
+}
+}
+</script>
+</body>
+</html>
