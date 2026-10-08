@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { SUIT_SYMBOL } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import { Modal, ModalActions } from '../../../ui/Modal';
@@ -5,6 +6,7 @@ import type { SeatView } from '../view';
 
 export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNext: () => void; onNewGame: () => void }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const r = view.history[view.history.length - 1];
   const over = view.phase === 'matchOver';
   const title = over ? t(view.winner === 0 ? 'match.won' : 'match.lost') : t('hand.title');
@@ -44,9 +46,14 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
       </div>
       <ModalActions>
         {over ? (
-          <button type="button" className="btn btn-primary" onClick={onNewGame}>
-            {t('match.again')}
-          </button>
+          <>
+            <button type="button" className="btn" onClick={() => navigate('/')}>
+              {t('match.menu')}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={onNewGame}>
+              {t('match.again')}
+            </button>
+          </>
         ) : (
           <button type="button" className="btn btn-primary" onClick={onNext} autoFocus>
             {t('hand.next')}

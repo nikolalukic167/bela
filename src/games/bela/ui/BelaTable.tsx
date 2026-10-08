@@ -148,12 +148,6 @@ function ScoreBar({ view }: { view: SeatView }) {
         <span className="opacity-50">:</span>
         <strong className="text-lg text-primary tabular-nums">{view.scores[1]}</strong> {t('team.them')}
       </div>
-      {view.trump && view.callerSeat !== null && (
-        <div className="badge badge-lg bg-white text-neutral border-0 gap-1" title={t('trump.label')}>
-          <span className={`suit suit--${view.trump} text-xl leading-none`}>{SUIT_SYMBOL[view.trump]}</span>
-          <span className="text-xs hidden sm:inline">{t(SEAT_NAME[positionOf(view.callerSeat, view.options, view.seat)])}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -192,6 +186,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
           />
         ))}
       </div>
+      <HandInfo view={view} />
       <DeclarationsAnnouncement view={view} />
 
       <section className="me">
@@ -296,6 +291,38 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   );
 }
 
+/** Always-visible trump tile and declarations chip, so neither is lost after the announcement. */
+function HandInfo({ view }: { view: SeatView }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const decl = view.declarations;
+  useEffect(() => setOpen(false), [view.handNo]);
+  if (!view.trump && !decl) return null;
+  return (
+    <div className="absolute left-2 top-2 z-[5] flex flex-col items-start gap-1.5">
+      {view.trump && view.callerSeat !== null && (
+        <div
+          className="flex flex-col items-center rounded-box bg-white text-neutral shadow-lg px-2.5 py-1 leading-none"
+          role="status"
+          aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}`}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
+          <span className={`suit suit--${view.trump} text-4xl leading-none`}>{SUIT_SYMBOL[view.trump]}</span>
+          <span className="text-[10px] opacity-70">{t(SEAT_NAME[positionOf(view.callerSeat, view.options, view.seat)])}</span>
+        </div>
+      )}
+      {decl && (
+        <>
+          <button type="button" className="btn btn-xs btn-warning shadow-md" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {t('decl.title')} · {t(decl.team === 0 ? 'team.us' : 'team.them')} {decl.declarations.reduce((n, d) => n + d.value, 0)}
+          </button>
+          {open && <Declarations view={view} onClose={() => setOpen(false)} className="top-full mt-1 left-0 w-max max-w-[calc(100vw-24px)]" />}
+        </>
+      )}
+    </div>
+  );
+}
+
 const ANNOUNCE_MS = 3000;
 
 /** Shows the counting declarations once per hand, briefly, away from the trick. */
@@ -308,16 +335,16 @@ function DeclarationsAnnouncement({ view }: { view: SeatView }) {
     return () => clearTimeout(timer);
   }, [key]);
   if (!key || dismissed === key) return null;
-  return <Declarations view={view} onClose={() => setDismissed(key)} />;
+  return <Declarations view={view} onClose={() => setDismissed(key)} className="top-2 left-1/2 -translate-x-1/2" />;
 }
 
-function Declarations({ view, onClose }: { view: SeatView; onClose: () => void }) {
+function Declarations({ view, onClose, className }: { view: SeatView; onClose: () => void; className: string }) {
   const { t } = useI18n();
   const names = useContext(SeatNames);
   const { team, declarations } = view.declarations!;
   return (
     <div
-      className="decl-banner card bg-base-100 shadow-xl absolute top-2 left-1/2 -translate-x-1/2 z-10 cursor-pointer text-sm"
+      className={`decl-banner card bg-base-100 shadow-xl absolute z-10 cursor-pointer text-sm ${className}`}
       role="status"
       onClick={onClose}
     >
