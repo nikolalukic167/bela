@@ -1,7 +1,42 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @plugin 'daisyui' {
-  themes: forest --default;
+  themes: forest;
+}
+/* Concept palette (docs/design/bela-concept/README.md). `forest` stays available as a fallback theme. */
+@plugin 'daisyui/theme' {
+  name: 'bela';
+  default: true;
+  color-scheme: dark;
+  --color-base-100: #123d2f;
+  --color-base-200: #17493a;
+  --color-base-300: #0c2a20;
+  --color-base-content: #e8f0ea;
+  --color-primary: #e7b84b;
+  --color-primary-content: #1a1405;
+  --color-secondary: #5c8dff;
+  --color-secondary-content: #0a1330;
+  --color-accent: #3f7a66;
+  --color-accent-content: #e8f0ea;
+  --color-neutral: #0c2a20;
+  --color-neutral-content: #e8f0ea;
+  --color-info: #5c8dff;
+  --color-info-content: #0a1330;
+  --color-success: #4fb286;
+  --color-success-content: #06150f;
+  --color-warning: #e7b84b;
+  --color-warning-content: #1a1405;
+  --color-error: #c23a2e;
+  --color-error-content: #fff;
+  --radius-selector: 1rem;
+  --radius-field: 0.875rem;
+  --radius-box: 1rem;
+  --border: 1px;
+}
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
 /*
@@ -10,21 +45,21 @@
  */
 
 :root {
-  --felt: #146b45;
-  --felt-dark: #0e5135;
-  --card-face: #fffdf7;
+  --felt: #123d2f;
+  --felt-dark: #0c2a20;
+  --card-face: #fbfaf5;
   --card-edge: #c9c2b0;
   --card-back: #8f1d2c;
   --card-back-alt: #a8283a;
-  --suit-red: #c8102e;
-  --suit-black: #161616;
+  --suit-red: #c23a2e;
+  --suit-black: #14201b;
 }
 
 .suit--hearts, .suit--diamonds { color: var(--suit-red); }
 .suit--clubs, .suit--spades { color: var(--suit-black); }
 
 .felt-bg {
-  background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 75%, #082418 100%);
+  background: var(--felt);
 }
 
 /* ---------- Table grid ---------- */

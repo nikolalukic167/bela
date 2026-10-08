@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
@@ -10,6 +10,7 @@ import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
 import { useGame } from '../../../ui/useGame';
 import { HUMAN_SEAT } from '../engine';
 import { belaGame } from '../game';
+import { BOT_LEVELS, type BotLevel } from '../bots';
 import { recordLocal, saveLocalGame } from '../history';
 import type { BelaAction, BelaOptions } from '../state';
 import type { SeatView } from '../view';
@@ -43,6 +44,15 @@ export function BelaTable() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [lastOptions, setLastOptions] = useState<BelaOptions>(belaGame.defaultOptions);
+  // Home's "Igraj protiv botova" arrives with the chosen strength and starts straight away.
+  const autostart = (useLocation().state as { autostart?: BotLevel } | null)?.autostart;
+  useEffect(() => {
+    if (view || !autostart || !BOT_LEVELS.includes(autostart)) return;
+    const o = { ...belaGame.defaultOptions, botLevel: autostart };
+    setLastOptions(o);
+    newGame(o);
+    navigate('/play/bela', { replace: true, state: null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const finished = view?.phase === 'matchOver' ? view : null;
   useEffect(() => {
     if (finished) saveLocalGame(recordLocal(finished, Date.now()));
@@ -117,7 +127,7 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
         <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_220px]">
           <Table view={view} onAct={spectating ? () => undefined : onAct} />
           <aside className="hidden lg:block p-3 pl-0">
-            <div className="card bg-base-100 shadow-md">
+            <div className="card bg-base-300 shadow-md">
               <div className="card-body p-3">
                 <h3 className="card-title text-base">{t('score.sheet')}</h3>
                 <ScoreSheet view={view} />
@@ -265,7 +275,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
   return (
     <div
-      className="trump-panel card bg-base-100 shadow-xl absolute left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2 z-10 w-[min(360px,calc(100%-32px))]"
+      className="trump-panel card bg-base-300 shadow-xl absolute left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2 z-10 w-[min(360px,calc(100%-32px))]"
       role="dialog"
       aria-label={t('trump.title')}
     >
@@ -395,7 +405,7 @@ function Declarations({ view, onClose, className }: { view: SeatView; onClose: (
   const { team, declarations } = view.declarations!;
   return (
     <div
-      className={`decl-banner card bg-base-100 shadow-xl absolute z-10 cursor-pointer text-sm ${className}`}
+      className={`decl-banner card bg-base-300 shadow-xl absolute z-10 cursor-pointer text-sm ${className}`}
       role="status"
       onClick={onClose}
     >
