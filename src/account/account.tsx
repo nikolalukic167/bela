@@ -2,16 +2,27 @@ import { ConvexAuthProvider, useAuthActions } from '@convex-dev/auth/react';
 import { ConvexReactClient, useConvexAuth, useQuery } from 'convex/react';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { api } from '../../convex/_generated/api';
+import { usernameToEmail } from './username';
 
 export interface Profile {
   name: string;
   image: string | null;
+  isGuest: boolean;
+  /** Only decides whether the admin link is shown; the server re-checks every admin call. */
+  isAdmin: boolean;
 }
 
 export type Account =
   | { status: 'unavailable' }
   | { status: 'loading' }
-  | { status: 'signedOut'; signInWithGoogle: () => void }
+  | {
+      status: 'signedOut';
+      signInWithGoogle: () => void;
+      /** Rejects when the name is not acceptable. */
+      signInAsGuest: (name: string) => Promise<void>;
+      /** Rejects on a wrong password / taken username. */
+      signInWithPassword: (username: string, password: string, flow: 'signIn' | 'signUp') => Promise<void>;
+    }
   | { status: 'signedIn'; profile: Profile | null; signOut: () => void };
 
 const Ctx = createContext<Account>({ status: 'unavailable' });
@@ -38,8 +49,17 @@ function ConvexAccount({ children }: { children: ReactNode }) {
   const value = useMemo<Account>(() => {
     if (isLoading) return { status: 'loading' };
     if (!isAuthenticated) {
-      // Come back to the same page (incl. #route); Convex appends ?code=… before the hash.
-      return { status: 'signedOut', signInWithGoogle: () => void signIn('google', { redirectTo: window.location.href }) };
+      return {
+        status: 'signedOut',
+        // Come back to the same page (incl. #route); Convex appends ?code=… before the hash.
+        signInWithGoogle: () => void signIn('google', { redirectTo: window.location.href }),
+        signInAsGuest: async (name) => {
+          await signIn('anonymous', { name });
+        },
+        signInWithPassword: async (username, password, flow) => {
+          await signIn('password', { email: usernameToEmail(username), password, flow });
+        },
+      };
     }
     return { status: 'signedIn', profile: profile ?? null, signOut: () => void signOut() };
   }, [isLoading, isAuthenticated, profile, signIn, signOut]);

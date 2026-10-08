@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useAccount } from '../account/account';
 import { GAMES } from '../core/registry';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
@@ -6,6 +7,7 @@ import { AppShell } from '../ui/AppShell';
 
 export function Home() {
   const { t } = useI18n();
+  const online = useAccount().status !== 'unavailable';
   return (
     <AppShell>
       <main className="mx-auto w-full max-w-5xl px-4 pb-12">
@@ -37,6 +39,11 @@ export function Home() {
                     <Link className="btn btn-ghost" to={`/rules/${g.id}`}>
                       {t('home.rules')}
                     </Link>
+                    {online && g.id === 'bela' && (
+                      <Link className="btn btn-outline" to="/online">
+                        {t('menu.online')}
+                      </Link>
+                    )}
                     <Link className="btn btn-primary" to={`/play/${g.id}`}>
                       {t('home.play')}
                     </Link>

@@ -1,16 +1,22 @@
 import { useState } from 'react';
 import { useI18n } from '../../../i18n/i18n';
 import { Modal, ModalActions } from '../../../ui/Modal';
+import { BOT_LEVELS, DEFAULT_BOT_LEVEL, type BotLevel } from '../bots';
 import type { BelaOptions } from '../state';
 
 export function NewGameDialog({
   initial,
   onStart,
   onCancel,
+  levels = BOT_LEVELS,
+  startLabel,
 }: {
   initial: BelaOptions;
   onStart: (o: BelaOptions) => void;
   onCancel?: () => void;
+  /** Bot levels on offer (online tables exclude the ones too slow for the server). */
+  levels?: readonly BotLevel[];
+  startLabel?: string;
 }) {
   const { t } = useI18n();
   const [opts, setOpts] = useState(initial);
@@ -20,8 +26,16 @@ export function NewGameDialog({
       <span className="text-base-content">{label}</span>
     </label>
   );
+  const level = opts.botLevel ?? DEFAULT_BOT_LEVEL;
   return (
     <Modal title={t('settings.title')}>
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">{t('settings.botLevel')}</legend>
+        <div className="flex flex-wrap gap-4">
+          {levels.map((l) => radio('botLevel', l, level, t(`botLevel.${l}`), (v) => setOpts({ ...opts, botLevel: v })))}
+        </div>
+        <p className="text-sm opacity-70">{t(`botLevel.${level}.desc`)}</p>
+      </fieldset>
       <fieldset className="fieldset">
         <legend className="fieldset-legend">{t('settings.target')}</legend>
         <div className="flex flex-wrap gap-4">
@@ -65,7 +79,7 @@ export function NewGameDialog({
           </button>
         )}
         <button type="button" className="btn btn-primary" onClick={() => onStart(opts)}>
-          {t('settings.start')}
+          {startLabel ?? t('settings.start')}
         </button>
       </ModalActions>
     </Modal>

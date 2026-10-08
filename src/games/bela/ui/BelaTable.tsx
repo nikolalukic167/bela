@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
@@ -15,6 +15,7 @@ import type { SeatView } from '../view';
 import { HandSummary } from './HandSummary';
 import { NewGameDialog } from './NewGameDialog';
 import { positionOf, type Position } from './positions';
+import { perspective } from './perspective';
 import { ScoreSheet } from './ScoreSheet';
 
 const SEAT_NAME: Record<Position, StringKey> = {
@@ -25,6 +26,9 @@ const SEAT_NAME: Record<Position, StringKey> = {
 };
 
 const canHover = () => typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+/** Real player names for online tables, indexed by seat. Local games use the seat labels instead. */
+const SeatNames = createContext<(string | null)[] | null>(null);
 
 export function BelaTable() {
   const { t } = useI18n();
@@ -37,7 +41,6 @@ export function BelaTable() {
     storageKey: 'bela:v2',
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [showSheet, setShowSheet] = useState(false);
   const [lastOptions, setLastOptions] = useState<BelaOptions>(belaGame.defaultOptions);
 
   const start = (o: BelaOptions) => {
@@ -45,14 +48,6 @@ export function BelaTable() {
     setShowSettings(false);
     newGame(o);
   };
-
-  const gameActions: MenuAction[] = view
-    ? [
-        { label: t('nav.newGame'), onClick: () => setShowSettings(true) },
-        { label: t('score.sheet'), onClick: () => setShowSheet(true) },
-        { label: t('nav.rules'), onClick: () => navigate('/rules/bela') },
-      ]
-    : [];
 
   if (!view) {
     return (
@@ -64,32 +59,13 @@ export function BelaTable() {
   }
 
   return (
-    <AppShell fixed gameActions={gameActions} center={<ScoreBar view={view} />}>
-      <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_220px]">
-        <Table view={view} onAct={act} />
-        <aside className="hidden lg:block p-3 pl-0">
-          <div className="card bg-base-100 shadow-md">
-            <div className="card-body p-3">
-              <h3 className="card-title text-base">{t('score.sheet')}</h3>
-              <ScoreSheet view={view} />
-            </div>
-          </div>
-        </aside>
-      </div>
-
-      {showSheet && (
-        <Modal title={t('score.sheet')}>
-          <ScoreSheet view={view} />
-          <ModalActions>
-            <button type="button" className="btn" onClick={() => setShowSheet(false)}>
-              {t('settings.cancel')}
-            </button>
-          </ModalActions>
-        </Modal>
-      )}
-      {(view.phase === 'handOver' || view.phase === 'matchOver') && (
-        <HandSummary view={view} onNext={() => act({ type: 'next' })} onNewGame={() => setShowSettings(true)} />
-      )}
+    <>
+      <TableScreen
+        view={view}
+        onAct={act}
+        onMatchEnd={() => setShowSettings(true)}
+        gameActions={[{ label: t('nav.newGame'), onClick: () => setShowSettings(true) }]}
+      />
       {showSettings && (
         <NewGameDialog
           initial={view.options}
@@ -100,7 +76,66 @@ export function BelaTable() {
           onCancel={() => setShowSettings(false)}
         />
       )}
-    </AppShell>
+    </>
+  );
+}
+
+interface ScreenProps {
+  /** The seat's view; teams are re-oriented so "us" is the viewer's team. */
+  view: SeatView;
+  onAct: Act;
+  /** Pressed on the match-over summary. */
+  onMatchEnd: () => void;
+  /** Extra entries at the top of the menu (new game, leave table...). */
+  gameActions?: MenuAction[];
+  /** Player names by seat (online). */
+  names?: (string | null)[];
+  /** Watching a bot match: no controls, no hand summary dialog. */
+  spectating?: boolean;
+}
+
+/** Navbar score, felt table, score sheet and hand summary: shared by local and online play. */
+export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = [], names, spectating }: ScreenProps) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [showSheet, setShowSheet] = useState(false);
+  const view = perspective(rawView);
+  const actions: MenuAction[] = [
+    ...gameActions,
+    { label: t('score.sheet'), onClick: () => setShowSheet(true) },
+    { label: t('nav.rules'), onClick: () => navigate('/rules/bela') },
+  ];
+
+  return (
+    <SeatNames.Provider value={names ?? null}>
+      <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
+        <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_220px]">
+          <Table view={view} onAct={spectating ? () => undefined : onAct} />
+          <aside className="hidden lg:block p-3 pl-0">
+            <div className="card bg-base-100 shadow-md">
+              <div className="card-body p-3">
+                <h3 className="card-title text-base">{t('score.sheet')}</h3>
+                <ScoreSheet view={view} />
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {showSheet && (
+          <Modal title={t('score.sheet')}>
+            <ScoreSheet view={view} />
+            <ModalActions>
+              <button type="button" className="btn" onClick={() => setShowSheet(false)}>
+                {t('settings.cancel')}
+              </button>
+            </ModalActions>
+          </Modal>
+        )}
+        {!spectating && (view.phase === 'handOver' || view.phase === 'matchOver') && (
+          <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} />
+        )}
+      </AppShell>
+    </SeatNames.Provider>
   );
 }
 
@@ -116,7 +151,7 @@ function ScoreBar({ view }: { view: SeatView }) {
       {view.trump && view.callerSeat !== null && (
         <div className="badge badge-lg bg-white text-neutral border-0 gap-1" title={t('trump.label')}>
           <span className={`suit suit--${view.trump} text-xl leading-none`}>{SUIT_SYMBOL[view.trump]}</span>
-          <span className="text-xs hidden sm:inline">{t(SEAT_NAME[positionOf(view.callerSeat, view.options)])}</span>
+          <span className="text-xs hidden sm:inline">{t(SEAT_NAME[positionOf(view.callerSeat, view.options, view.seat)])}</span>
         </div>
       )}
     </div>
@@ -151,7 +186,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
           <Card
             key={cardId(p.card)}
             card={p.card}
-            className={`trick-card trick-card--${positionOf(p.seat, view.options)} ${
+            className={`trick-card trick-card--${positionOf(p.seat, view.options, view.seat)} ${
               view.trickComplete && p.winning ? 'trick-card--win' : ''
             }`}
           />
@@ -187,7 +222,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
 
 function Opponent({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
-  const pos = positionOf(seat, view.options);
+  const pos = positionOf(seat, view.options, view.seat);
   const count = view.seats[seat].cardCount;
   return (
     <section className={`opponent opponent--${pos}`} aria-label={t(SEAT_NAME[pos])}>
@@ -204,6 +239,7 @@ function Opponent({ view, seat }: { view: SeatView; seat: number }) {
 
 function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
+  const names = useContext(SeatNames);
   const info = view.seats[seat];
   let note = '';
   if (info.passed) note = t('status.passed');
@@ -211,7 +247,7 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
       <span className={`badge badge-sm ${info.isTurn ? 'badge-warning' : 'badge-neutral'}`}>
-        {t(SEAT_NAME[positionOf(seat, view.options)])}
+        {names?.[seat] ?? t(SEAT_NAME[positionOf(seat, view.options, view.seat)])}
         {note && <em className="font-normal">{note}</em>}
       </span>
       {info.isDealer && (
@@ -277,6 +313,7 @@ function DeclarationsAnnouncement({ view }: { view: SeatView }) {
 
 function Declarations({ view, onClose }: { view: SeatView; onClose: () => void }) {
   const { t } = useI18n();
+  const names = useContext(SeatNames);
   const { team, declarations } = view.declarations!;
   return (
     <div
@@ -290,7 +327,7 @@ function Declarations({ view, onClose }: { view: SeatView; onClose: () => void }
       </strong>
       {declarations.map((d, i) => (
         <div key={i} className="flex items-center gap-2">
-          <span className="min-w-14">{t(SEAT_NAME[positionOf(d.seat, view.options)])}</span>
+          <span className="min-w-14">{names?.[d.seat] ?? t(SEAT_NAME[positionOf(d.seat, view.options, view.seat)])}</span>
           <span className="flex">
             {d.cards.map((c) => (
               <Card key={cardId(c)} card={c} className="mini-card" />

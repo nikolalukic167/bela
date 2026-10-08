@@ -1,0 +1,15 @@
+[
+ {
+  "a": "ismcts:iters=9000",
+  "b": "pimc",
+  "mode": "hands",
+  "hands": 800,
+  "meanDiff": 0.04,
+  "se": 2.01,
+  "aCallRate": 0.5,
+  "aFellRate": 0.225,
+  "bFellRate": 0.215,
+  "cardDiff": 0.86,
+  "seconds": 742.943
+ }
+]

@@ -9,7 +9,8 @@ A responsive web app for playing **Bela** against three bots, built so more card
 ```bash
 npm install
 npm run dev        # http://localhost:5173/bela/
-npm test           # engine unit tests + 200 simulated bot matches
+npm test           # engine, bots, and the server functions (convex-test)
+npm run typecheck  # app + convex/ type-check
 npm run build      # type-check + production build into dist/
 ```
 
@@ -18,11 +19,23 @@ npm run build      # type-check + production build into dist/
 ```
 src/core/          game-agnostic: cards, seeded RNG, GameDefinition interface, game registry
 src/games/bela/    pure Bela engine (rules, legality, declarations, scoring, bot) + ui/
+src/ratings/       OpenSkill player ratings: replay match history, leaderboard, predictions
 src/ui/            shared UI: SVG Card, Modal, useGame hook (bots, auto actions, persistence)
 src/pages/         Home (game picker), Play/:gameId, Rules/:gameId
+src/online/        online lobby and table pages (Convex)
+src/account/       sign-in (guest, username, Google) and account context
+src/admin/         hidden admin panel (test data, bot matches)
+convex/            server: auth, tables, admin; lib/tableLogic.ts is the pure core
+tests/             server tests: tests/server (pure), tests/convex (convex-test)
 src/i18n/          Croatian / English strings
 docs/rules/bela.md exact rules the engine implements
+docs/bots/         bot levels (random → heuristic → tracking → PIMC → ISMCTS), experiments, report
 ```
+
+## Bots
+
+Players pick the bot strength (Easy / Medium / Hard / Expert) when starting a game. How the bots work
+and how they were measured: [docs/bots/README.md](docs/bots/README.md) and [docs/bots/report.md](docs/bots/report.md).
 
 ### Adding another game
 1. Implement `GameDefinition` (`src/core/game.ts`) in `src/games/<id>/` – pure functions over JSON state.
@@ -38,7 +51,13 @@ Only the card-table layout in `src/styles.css` is custom CSS.
 
 ## Online play
 
-See [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the phased plan.
+Sign-in works without Google (guest name or username + password). Players can open a table, share its code or link, and bots fill empty seats. Admins get a hidden panel with test data and bot-vs-bot matches (see architecture §15).
+
+See [docs/architecture.md](docs/architecture.md) for the full architecture, priorities, security and code standards, and [docs/online-games-plan.md](docs/online-games-plan.md) for the backend analysis (recommendation: Convex) and the first online phases.
+
+## Ratings
+
+See [docs/ratings.md](docs/ratings.md). Ratings are computed from an append-only match history and are meant to run server-side once online play exists.
 
 ## Hosting (GitHub Pages)
 
