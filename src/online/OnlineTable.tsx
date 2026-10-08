@@ -97,72 +97,109 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
   const addBot = useMutation(api.tables.addBot);
   const clearSeat = useMutation(api.tables.clearSeat);
   const start = useMutation(api.tables.start);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const lobby = data.status === 'lobby';
   const seated = data.mySeat !== null;
   const hasEmpty = data.seats.some((s) => s.kind === 'empty');
   const link = `${window.location.origin}${window.location.pathname}#/t/${code}`;
 
-  const copy = async () => {
+  const copy = async (text: string, what: string) => {
     try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
       /* clipboard blocked: the link is shown for manual copying */
     }
+  };
+  const share = async () => {
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ url: link, title: code });
+        return;
+      } catch {
+        /* dismissed or unsupported: fall back to copying */
+      }
+    }
+    await copy(link, 'link');
   };
 
   return (
     <AppShell>
       <main className="mx-auto w-full max-w-xl px-4 pb-12">
-        <div className="py-8">
-          <h1 className="text-3xl font-bold">
-            <span className="font-mono tracking-widest">{code}</span>
-          </h1>
-          <span className="badge badge-ghost mt-2">{t(`online.status.${data.status}`)}</span>
-          {data.isTest && <span className="badge badge-warning ml-2">test</span>}
-        </div>
         {error && (
-          <div role="alert" className="alert alert-error alert-soft mb-4">
+          <div role="alert" className="alert alert-error alert-soft mt-4 mb-4">
             {error}
           </div>
         )}
 
-        {lobby && (
-          <div className="card bg-base-200 mb-4">
-            <div className="card-body p-4 gap-2">
-              <p className="text-sm opacity-80">{t('online.share')}</p>
-              <input readOnly className="input input-sm w-full font-mono" value={link} aria-label={t('online.copyLink')} onFocus={(e) => e.currentTarget.select()} />
-              <button type="button" className="btn btn-sm self-start" onClick={() => void copy()}>
-                {copied ? t('online.copied') : t('online.copyLink')}
-              </button>
+        <div className="card mt-4 mb-5 rounded-3xl bg-base-200">
+          <div className="card-body items-center gap-3.5 p-6">
+            <div className="text-xs font-bold uppercase tracking-widest text-base-content/70">{t('online.codeLabel')}</div>
+            <div className="font-display text-6xl font-extrabold leading-none tracking-[0.12em]" aria-label={code}>
+              {code}
             </div>
+            <div className="flex items-center gap-2">
+              <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
+              {data.isTest && <span className="badge badge-warning">test</span>}
+            </div>
+            {lobby && (
+              <>
+                <div className="flex w-full gap-2.5">
+                  <button type="button" className="btn btn-outline h-12 flex-1 rounded-2xl border-accent" onClick={() => void copy(code, 'code')}>
+                    {copied === 'code' ? t('online.copied') : t('online.copyCode')}
+                  </button>
+                  <button type="button" className="btn btn-primary h-12 flex-1 rounded-2xl" onClick={() => void share()}>
+                    {copied === 'link' ? t('online.copied') : t('online.shareLink')}
+                  </button>
+                </div>
+                <input readOnly className="input input-sm w-full font-mono" value={link} aria-label={t('online.copyLink')} onFocus={(e) => e.currentTarget.select()} />
+              </>
+            )}
           </div>
-        )}
+        </div>
 
-        <ul className="flex flex-col gap-2 mb-6">
-          {data.seats.map((s) => (
-            <li key={s.seat} className="card bg-base-200 px-4 py-3 flex-row items-center gap-3">
-              <div className="text-xs opacity-60 w-20 shrink-0">
-                {t('online.seat')} {s.seat + 1}
-                <br />
-                {t(s.seat % 2 === 0 ? 'online.teamA' : 'online.teamB')}
-              </div>
-              <div className="flex-1 min-w-0 truncate">
-                {s.kind === 'empty' ? <span className="opacity-50">{t('online.empty')}</span> : <strong>{s.name}</strong>}
-                {s.isMe && <span className="badge badge-sm badge-primary ml-2">{t('online.you')}</span>}
-                {s.kind === 'bot' && <span className="badge badge-sm badge-ghost ml-2">{t('online.bot')}</span>}
-                {data.isHost && s.isMe && <span className="badge badge-sm badge-ghost ml-2">{t('online.host')}</span>}
-              </div>
-              {lobby && data.isHost && s.kind !== 'empty' && !s.isMe && (
-                <button type="button" className="btn btn-xs btn-ghost" onClick={() => void guard(() => clearSeat({ code, seat: s.seat }))}>
-                  {t('online.remove')}
-                </button>
-              )}
-            </li>
+        <div className="mb-6 flex flex-col gap-2.5">
+          {[0, 1].map((team) => (
+            <section key={team} aria-label={t(team === 0 ? 'online.teamA' : 'online.teamB')} className="flex flex-col gap-2.5">
+              <h2 className="mt-1 text-xs font-bold uppercase tracking-widest text-base-content/70">{t(team === 0 ? 'online.teamA' : 'online.teamB')}</h2>
+              {data.seats
+                .filter((s) => s.seat % 2 === team)
+                .map((s) => (
+                  <div
+                    key={s.seat}
+                    className={`flex items-center gap-3 rounded-2xl bg-base-300 px-3.5 py-3 ${s.kind === 'empty' ? 'border border-dashed border-accent' : ''}`}
+                  >
+                    {s.kind === 'empty' ? (
+                      <span className="size-10 shrink-0 rounded-full border border-dashed border-accent" aria-hidden="true" />
+                    ) : (
+                      <span
+                        className={`grid size-10 shrink-0 place-items-center rounded-full font-bold ${s.isMe ? 'bg-primary text-primary-content' : 'bg-secondary text-secondary-content'}`}
+                        aria-hidden="true"
+                      >
+                        {(s.name ?? '?').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate font-bold">{s.kind === 'empty' ? t('online.emptySeat') : s.name}</span>
+                      <span className="truncate text-sm text-base-content/70">
+                        {s.kind === 'empty'
+                          ? t('online.emptyHint')
+                          : [s.isMe && t('online.you'), s.kind === 'bot' && t('online.bot'), data.isHost && s.isMe && t('online.host')]
+                              .filter(Boolean)
+                              .join(' · ')}
+                      </span>
+                    </div>
+                    {lobby && data.isHost && s.kind !== 'empty' && !s.isMe && (
+                      <button type="button" className="btn btn-xs btn-ghost" onClick={() => void guard(() => clearSeat({ code, seat: s.seat }))}>
+                        {t('online.remove')}
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </section>
           ))}
-        </ul>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           {lobby && !seated && hasEmpty && (
@@ -175,7 +212,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
               <button type="button" className="btn" disabled={!hasEmpty} onClick={() => void guard(() => addBot({ code }))}>
                 {t('online.addBot')}
               </button>
-              <button type="button" className="btn btn-primary" onClick={() => void guard(() => start({ code }))}>
+              <button type="button" className="btn btn-primary h-[52px] w-full rounded-2xl text-[17px] order-first" onClick={() => void guard(() => start({ code }))}>
                 {t('online.start')}
               </button>
             </>
