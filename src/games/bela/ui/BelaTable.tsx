@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT } from '../../../core/cards';
+import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
 import { Card } from '../../../ui/Card';
@@ -187,6 +187,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
         ))}
       </div>
       <HandInfo view={view} />
+      <TrumpToast view={view} />
       <DeclarationsAnnouncement view={view} />
 
       <section className="me">
@@ -324,6 +325,51 @@ function HandInfo({ view }: { view: SeatView }) {
 }
 
 const ANNOUNCE_MS = 3000;
+const TRUMP_TOAST_DELAY_MS = 300;
+const TRUMP_TOAST_MS = 2500;
+
+/** Briefly announces who called trump, but only when the call happens in front of us. */
+function TrumpToast({ view }: { view: SeatView }) {
+  const { t } = useI18n();
+  const names = useContext(SeatNames);
+  const before = useRef({ hand: view.handNo, trump: view.trump });
+  const [call, setCall] = useState<{ id: number; seat: number; suit: Suit } | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const prev = before.current;
+    before.current = { hand: view.handNo, trump: view.trump };
+    if (prev.hand === view.handNo && !prev.trump && view.trump && view.callerSeat !== null) {
+      setCall({ id: Date.now(), seat: view.callerSeat, suit: view.trump });
+    }
+  }, [view.handNo, view.trump, view.callerSeat]);
+
+  useEffect(() => {
+    if (!call) return;
+    const show = setTimeout(() => setVisible(true), TRUMP_TOAST_DELAY_MS);
+    const hide = setTimeout(() => setVisible(false), TRUMP_TOAST_DELAY_MS + TRUMP_TOAST_MS);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+      setVisible(false);
+    };
+  }, [call]);
+
+  if (!call || !visible) return null;
+  const who = names?.[call.seat] ?? t(SEAT_NAME[positionOf(call.seat, view.options, view.seat)]);
+  return (
+    <div
+      className="decl-banner alert bg-white text-neutral shadow-xl absolute top-[36%] left-1/2 -translate-x-1/2 z-10 w-max max-w-[calc(100%-24px)] cursor-pointer py-2"
+      role="status"
+      onClick={() => setVisible(false)}
+    >
+      <span className={`suit suit--${call.suit} text-3xl leading-none`}>{SUIT_SYMBOL[call.suit]}</span>
+      <span className="font-bold">
+        {who} {t('trump.announce')}: {t(`suit.${call.suit}` as StringKey)}
+      </span>
+    </div>
+  );
+}
 
 /** Shows the counting declarations once per hand, briefly, away from the trick. */
 function DeclarationsAnnouncement({ view }: { view: SeatView }) {
