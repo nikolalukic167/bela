@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL } from '../../../core/cards';
+import { SuitMark } from '../../../ui/decks';
 import { useI18n } from '../../../i18n/i18n';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import type { SeatView } from '../view';
@@ -20,7 +20,7 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
   return (
     <Modal title={title}>
       <p className="mb-2">
-        {t('trump.label')}: <span className={`suit suit--${r.trump} text-xl`}>{SUIT_SYMBOL[r.trump]}</span> ·{' '}
+        {t('trump.label')}: <span className={`suit suit--${r.trump} text-xl`}><SuitMark suit={r.trump} /></span> ·{' '}
         {t('trump.calledBy')} {t(r.caller === 0 ? 'team.us' : 'team.them')}
       </p>
       <table className="table table-sm tabular-nums">

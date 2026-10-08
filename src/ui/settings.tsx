@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { DECK_IDS, type DeckId } from './decks/ids';
 import { loadJson, saveJson } from './storage';
 
 export type Speed = 'slow' | 'normal' | 'fast';
@@ -13,18 +14,31 @@ export const SPEED_DELAYS: Record<Speed, { bot: number; auto: number }> = {
 interface Settings {
   speed: Speed;
   setSpeed: (s: Speed) => void;
+  /** How this player's cards look. Purely local: other players at the table keep their own choice. */
+  deck: DeckId;
+  setDeck: (d: DeckId) => void;
 }
 
 const Ctx = createContext<Settings | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [speed, setSpeed] = useState<Speed>(() => loadJson<Speed>('speed') ?? 'normal');
+  const [deck, setDeck] = useState<DeckId>(() => {
+    const saved = loadJson<DeckId>('deck');
+    return saved && DECK_IDS.includes(saved) ? saved : 'french';
+  });
   useEffect(() => saveJson('speed', speed), [speed]);
-  return <Ctx.Provider value={{ speed, setSpeed }}>{children}</Ctx.Provider>;
+  useEffect(() => saveJson('deck', deck), [deck]);
+  return <Ctx.Provider value={{ speed, setSpeed, deck, setDeck }}>{children}</Ctx.Provider>;
 }
 
 export function useSettings(): Settings {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useSettings outside SettingsProvider');
   return ctx;
+}
+
+/** The viewer's deck; falls back to the French deck where no provider exists (tests, isolated renders). */
+export function useDeck(): DeckId {
+  return useContext(Ctx)?.deck ?? 'french';
 }

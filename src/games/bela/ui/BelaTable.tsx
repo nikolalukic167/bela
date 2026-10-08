@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL, SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
+import { SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
 import { Card } from '../../../ui/Card';
+import { SuitMark } from '../../../ui/decks';
 import { AppShell, type MenuAction } from '../../../ui/AppShell';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
@@ -194,7 +195,7 @@ function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
       aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}`}
     >
       <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
-      <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}>{SUIT_SYMBOL[view.trump]}</span>
+      <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}><SuitMark suit={view.trump} /></span>
     </div>
   );
 }
@@ -265,7 +266,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
                 <>
                   {' '}
                   {selected.rank}
-                  <span className={`suit suit--${selected.suit}`}>{SUIT_SYMBOL[selected.suit]}</span>
+                  <span className={`suit suit--${selected.suit}`}><SuitMark suit={selected.suit} /></span>
                 </>
               )}
             </button>
@@ -383,7 +384,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
                 className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white"
                 onClick={() => onAct({ type: 'call', suit })}
               >
-                <span className={`suit suit--${suit} text-3xl leading-none`}>{SUIT_SYMBOL[suit]}</span>
+                <span className={`suit suit--${suit} text-3xl leading-none`}><SuitMark suit={suit} /></span>
                 <span className="text-xs font-medium">
                   {n} {t(n === 1 ? 'trump.count1' : 'trump.countN')}
                 </span>
@@ -462,7 +463,7 @@ function TrumpToast({ view }: { view: SeatView }) {
       role="status"
       onClick={() => setVisible(false)}
     >
-      <span className={`suit suit--${call.suit} text-3xl leading-none`}>{SUIT_SYMBOL[call.suit]}</span>
+      <span className={`suit suit--${call.suit} text-3xl leading-none`}><SuitMark suit={call.suit} /></span>
       <span className="font-bold">
         {who} {t('trump.announce')}: {t(`suit.${call.suit}` as StringKey)}
       </span>

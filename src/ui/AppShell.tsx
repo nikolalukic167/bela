@@ -4,6 +4,7 @@ import { useAccount } from '../account/account';
 import { SignInDialog } from '../account/SignInDialog';
 import { GAMES } from '../core/registry';
 import { useI18n } from '../i18n/i18n';
+import { DECK_IDS, DeckPreview } from './decks';
 import { useSettings, type Speed } from './settings';
 
 export interface MenuAction {
@@ -24,7 +25,7 @@ interface Props {
 /** Navbar + side drawer menu (daisyUI) shared by every page. */
 export function AppShell({ center, gameActions, children, fixed }: Props) {
   const { t, lang, setLang } = useI18n();
-  const { speed, setSpeed } = useSettings();
+  const { speed, setSpeed, deck, setDeck } = useSettings();
   const [open, setOpen] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const online = useAccount().status !== 'unavailable';
@@ -145,6 +146,23 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                       onClick={() => setLang(l)}
                     >
                       {l === 'hr' ? 'Hrvatski' : 'English'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 items-start">
+                <span id="menu-deck" className="text-sm opacity-70">{t('menu.deck')}</span>
+                <div className="join" role="group" aria-labelledby="menu-deck">
+                  {DECK_IDS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      aria-pressed={deck === d}
+                      className={`btn h-auto join-item flex-col gap-1 py-2 ${deck === d ? 'btn-primary' : ''}`}
+                      onClick={() => setDeck(d)}
+                    >
+                      <DeckPreview id={d} />
+                      <span className="text-xs">{t(`deck.${d}`)}</span>
                     </button>
                   ))}
                 </div>

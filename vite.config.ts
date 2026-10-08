@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.ts'],
     // convex-test must be bundled by vite to see import.meta.glob and the edge runtime.
     server: { deps: { inline: ['convex-test'] } },
   },
