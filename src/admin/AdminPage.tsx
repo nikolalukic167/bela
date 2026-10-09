@@ -181,8 +181,98 @@ function Admin() {
             </div>
           </div>
         </section>
+        <Reports />
       </main>
     </AppShell>
+  );
+}
+
+/** Player reports and the moderation log (architecture §9.4). */
+function Reports() {
+  const [status, setStatus] = useState<'open' | 'resolved'>('open');
+  const reports = useQuery(api.moderation.reports, { status });
+  const log = useQuery(api.moderation.log, {});
+  const resolve = useMutation(api.moderation.resolve);
+  const when = (at: number) => new Date(at).toLocaleString('en-GB');
+  return (
+    <>
+      <section className="card bg-base-200 mt-6">
+        <div className="card-body">
+          <h2 className="card-title">Reports</h2>
+          <div className="join">
+            {(['open', 'resolved'] as const).map((s) => (
+              <button key={s} type="button" className={`btn btn-sm join-item ${status === s ? 'btn-primary' : ''}`} onClick={() => setStatus(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Reported</th>
+                  <th>Reason</th>
+                  <th>By</th>
+                  <th>Table</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {reports?.map((r) => (
+                  <tr key={r.id}>
+                    <td className="text-xs">{when(r.createdAt)}</td>
+                    <td className="font-bold">{r.reported}</td>
+                    <td>{r.reason}</td>
+                    <td>{r.reporter}</td>
+                    <td className="font-mono">{r.tableCode ?? ''}</td>
+                    <td className="flex gap-1">
+                      {r.status === 'open' ? (
+                        <>
+                          <button type="button" className="btn btn-xs" onClick={() => void resolve({ reportId: r.id, action: 'dismiss' })}>
+                            Dismiss
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-xs btn-warning"
+                            onClick={() => window.confirm(`Rename ${r.reported} to a neutral name?`) && void resolve({ reportId: r.id, action: 'resetName' })}
+                          >
+                            Reset name
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs opacity-70">{r.resolution}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {reports && reports.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="opacity-60">
+                      No {status} reports.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="card bg-base-200 mt-6">
+        <div className="card-body">
+          <h2 className="card-title">Moderation log</h2>
+          <ul className="text-sm flex flex-col gap-1">
+            {log?.map((l) => (
+              <li key={l.id}>
+                <span className="opacity-60">{when(l.at)}</span> · <b>{l.actor}</b> {l.action} {l.target}
+              </li>
+            ))}
+            {log && log.length === 0 && <li className="opacity-60">Nothing yet.</li>}
+          </ul>
+        </div>
+      </section>
+    </>
   );
 }
 

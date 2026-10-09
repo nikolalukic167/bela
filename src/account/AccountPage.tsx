@@ -1,6 +1,7 @@
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
 import { errorKey } from '../online/errors';
@@ -34,6 +35,7 @@ function Account() {
       <main className="mx-auto w-full max-w-xl px-4 pb-12">
         <h1 className="text-2xl font-bold py-6">{t('account.title')}</h1>
         <RenameCard current={account.profile.name} />
+        <PeopleCard />
       </main>
     </AppShell>
   );
@@ -78,6 +80,43 @@ function RenameCard({ current }: { current: string }) {
           </div>
         )}
       </form>
+    </section>
+  );
+}
+
+/** Blocked and muted players, with a way back. */
+function PeopleCard() {
+  const { t } = useI18n();
+  const lists = useQuery(api.moderation.lists, {});
+  const unblock = useMutation(api.moderation.unblock);
+  const unmute = useMutation(api.moderation.unmute);
+  if (!lists) return null;
+  const section = (title: StringKey, hint: StringKey | null, none: StringKey, rows: { userId: Id<'users'>; name: string }[], action: StringKey, undo: (userId: Id<'users'>) => unknown) => (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-bold">{t(title)}</h3>
+      {hint && <p className="text-sm opacity-70">{t(hint)}</p>}
+      {rows.length === 0 ? (
+        <p className="text-sm opacity-70">{t(none)}</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {rows.map((r) => (
+            <li key={r.userId} className="flex items-center justify-between gap-2">
+              <span className="truncate">{r.name}</span>
+              <button type="button" className="btn btn-xs" onClick={() => void undo(r.userId)}>
+                {t(action)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <section className="card bg-base-200 mb-5">
+      <div className="card-body gap-4">
+        {section('account.blockedTitle', 'account.blockedHint', 'account.noneBlocked', lists.blocked, 'mod.unblock', (userId) => unblock({ userId }))}
+        {section('account.mutedTitle', 'mod.muteHint', 'account.noneMuted', lists.muted, 'mod.unmute', (userId) => unmute({ userId }))}
+      </div>
     </section>
   );
 }

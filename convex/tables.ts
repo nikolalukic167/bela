@@ -43,6 +43,7 @@ import { viewFor } from '../src/games/bela/view';
 import { recordGame } from './ratings';
 import { ratedBlocker } from './lib/ratingLogic';
 import { belaGame } from '../src/games/bela/game';
+import { blockedBetween } from './lib/blocks';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -182,6 +183,9 @@ export const join = mutation({
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
+    // Blocks work both ways (architecture §9.4): neither side sits down with the other.
+    const seated = seats.flatMap((s) => (s.kind === 'user' ? [s.userId] : s.kind === 'bot' && s.standInFor ? [s.standInFor] : []));
+    if (await blockedBetween(ctx, user._id, seated)) throw new TableError('BLOCKED');
     seats[free] = { kind: 'user', userId: user._id, name: user.name ?? 'Igrač' };
     await ctx.db.patch(table._id, { seats });
     await ctx.db.insert('memberships', { userId: user._id, tableId: table._id });

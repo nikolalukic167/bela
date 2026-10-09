@@ -9,6 +9,7 @@ import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
 import { errorKey } from './errors';
 import { OnlineGate } from './OnlineGate';
+import { PlayersDialog } from './PlayersDialog';
 
 export function OnlineTablePage() {
   const { code = '' } = useParams();
@@ -29,6 +30,7 @@ function OnlineTable({ code }: { code: string }) {
   const leave = useMutation(api.tables.leave);
   const rematch = useMutation(api.tables.rematch);
   const [error, setError] = useState<string | null>(null);
+  const [players, setPlayers] = useState(false);
   useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
 
   const guard = async (fn: () => Promise<unknown>) => {
@@ -86,8 +88,10 @@ function OnlineTable({ code }: { code: string }) {
           gameActions={[
             { label: t('online.back'), onClick: () => navigate('/online') },
             ...(data.mySeat !== null && data.status !== 'finished' ? [{ label: t('online.leave'), onClick: () => void leaveGame() }] : []),
+            ...(data.mySeat !== null ? [{ label: t('mod.players'), onClick: () => setPlayers(true) }] : []),
           ]}
         />
+        {players && <PlayersDialog code={code} seats={data.seats} onClose={() => setPlayers(false)} />}
         {data.deadline !== null && (data.view.isMyTurn || data.view.phase === 'handOver') && <TurnCountdown deadline={data.deadline} />}
         {data.spectating && <div className="toast toast-top toast-center"><div className="alert alert-info">{t('online.spectating')}</div></div>}
         {error && <div className="toast toast-top toast-center"><div role="alert" className="alert alert-error">{error}</div></div>}
@@ -148,6 +152,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
   const clearSeat = useMutation(api.tables.clearSeat);
   const start = useMutation(api.tables.start);
   const [copied, setCopied] = useState<string | null>(null);
+  const [players, setPlayers] = useState(false);
   const lobby = data.status === 'lobby';
   const seated = data.mySeat !== null;
   const hasEmpty = data.seats.some((s) => s.kind === 'empty');
@@ -282,10 +287,16 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
               {t('online.leave')}
             </button>
           )}
+          {seated && data.seats.some((s) => !s.isMe && s.kind === 'user') && (
+            <button type="button" className="btn btn-ghost" onClick={() => setPlayers(true)}>
+              {t('mod.players')}
+            </button>
+          )}
           <Link to="/online" className="btn btn-ghost">
             {t('online.back')}
           </Link>
         </div>
+        {players && <PlayersDialog code={code} seats={data.seats} onClose={() => setPlayers(false)} />}
         {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t(data.rated ? 'online.ratedHint' : 'online.startHint')}</p>}
         {!lobby && !seated && <p className="text-sm opacity-70 mt-3">{t('online.watching')}</p>}
       </main>

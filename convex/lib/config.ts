@@ -27,3 +27,8 @@ export const CODE_LENGTH = 6;
 /** Name changes allowed per window (architecture §9.4). */
 export const RENAME_LIMIT = 3;
 export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Reports one player may file per day (architecture §9.4). */
+export const REPORT_LIMIT = 10;
+export const REPORT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** The name an admin gives a player whose name was reported as offensive. */
+export const NEUTRAL_NAME = 'Igrač';
