@@ -67,3 +67,13 @@ export const QUOTA_WARN_AT = 0.7;
 export const CALLS_PER_ACTION = 5;
 /** Finished unrated tables lose their move log after this; the games row stays (architecture §12). */
 export const ACTION_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Name changes allowed per window (architecture §9.4). */
+export const RENAME_LIMIT = 3;
+export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Reports one player may file per day (architecture §9.4). */
+export const REPORT_LIMIT = 10;
+export const REPORT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** The name an admin gives a player whose name was reported as offensive. */
+export const NEUTRAL_NAME = 'Igrač';
+/** Shown wherever a player who deleted their account used to appear (architecture §9.2). */
+export const DELETED_NAME = 'Obrisani igrač';

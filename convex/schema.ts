@@ -45,6 +45,10 @@ export default defineSchema({
     isBot: v.optional(v.boolean()),
     /** Created by the admin panel's seed; hidden from real users and removable in one click. */
     isTest: v.optional(v.boolean()),
+    /** Times of recent renames, for the rename rate limit (architecture §9.4). */
+    renameTimes: v.optional(v.array(v.number())),
+    /** Set when the player deleted their account; the row stays, anonymised, for others' game records. */
+    deletedAt: v.optional(v.number()),
   })
     .index('email', ['email'])
     .index('phone', ['phone'])
@@ -189,4 +193,54 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_table', ['tableId']),
+
+  // Blocks (architecture §9.4): neither side can join a table where the other sits.
+  blocks: defineTable({
+    userId: v.id('users'),
+    blockedId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId', 'blockedId'])
+    .index('by_blocked', ['blockedId']),
+
+  // Mutes: the muting player's client hides the muted player's emotes and phrases. Private to them.
+  mutes: defineTable({
+    userId: v.id('users'),
+    mutedId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId', 'mutedId'])
+    .index('by_muted', ['mutedId']),
+
+  // Player reports, reviewed in the admin panel. A fixed reason list, no free text.
+  reports: defineTable({
+    reporterId: v.id('users'),
+    reportedId: v.id('users'),
+    reason: v.union(v.literal('name'), v.literal('abuse'), v.literal('cheating'), v.literal('other')),
+    tableCode: v.optional(v.string()),
+    status: v.union(v.literal('open'), v.literal('resolved')),
+    resolution: v.optional(v.union(v.literal('dismiss'), v.literal('resetName'))),
+    createdAt: v.number(),
+  })
+    .index('by_status', ['status', 'createdAt'])
+    .index('by_reporter', ['reporterId', 'createdAt'])
+    .index('by_reported', ['reportedId']),
+
+  // Append-only log of moderation actions: reports filed, blocks, and admin decisions.
+  moderationLog: defineTable({
+    actorId: v.id('users'),
+    action: v.union(
+      v.literal('report'),
+      v.literal('block'),
+      v.literal('unblock'),
+      v.literal('dismiss'),
+      v.literal('resetName'),
+    ),
+    targetId: v.optional(v.id('users')),
+    reportId: v.optional(v.id('reports')),
+    at: v.number(),
+  })
+    .index('by_at', ['at'])
+    .index('by_actor', ['actorId'])
+    .index('by_target', ['targetId']),
 });

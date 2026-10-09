@@ -94,7 +94,7 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 
 | Table | Key fields | Notes |
 |---|---|---|
-| `users` | auth fields, `isAnonymous` (guest), `isAdmin`, `isBot`, `isTest`; later `country`, `city`, `locale` | Our flags are optional so Convex Auth can create users. `isAdmin` is granted only from the Convex dashboard (§15). |
+| `users` | auth fields, `isAnonymous` (guest), `isAdmin`, `isBot`, `isTest`, `renameTimes`, `deletedAt`; later `country`, `city`, `locale` | Our flags are optional so Convex Auth can create users. `isAdmin` is granted only from the Convex dashboard (§15). A deleted account is a stub `{name, deletedAt}` (§9.2). |
 | `tables` | `code`, `codeExpiresAt`, `timerProfile`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
 | `tableStates` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. `version` is bumped per action; scheduled steps carry the version they expect, so a stale one is a no-op. |
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
@@ -103,6 +103,9 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt` | One row per finished non-test match, written with the rating update. |
 | `ratings` | `userId`, `mu`, `sigma`, `gamesPlayed`, `lastPlayedAt`, `display` (mu − 3σ, indexed for the board) | OpenSkill, not a single Elo number. Solo scope only; pair ratings come with phase 4. |
 | `ratingHistory` | `userId`, `gameId`, `mu`, `sigma`, `display`, `delta`, `at` | One point per player per rated game; feeds the rating graph. |
+| `blocks`, `mutes` | `userId` + `blockedId` / `mutedId` | Block keeps both sides off each other's tables; mute is private to the muter (§9.4). |
+| `reports` | `reporterId`, `reportedId`, `reason` (name/abuse/cheating/other), `tableCode`, `status`, `resolution` | Reviewed in `/admin`. Fixed reasons, no free text. |
+| `moderationLog` | `actorId`, `action` (report/block/unblock/dismiss/resetName), `targetId`, `reportId`, `at` | Append-only. Ids only, no names. |
 | `retiredCodes` | `code`, `tableId` | Invite codes the host replaced; resolve only for players seated at that table (§9.3). |
 | `rateLimits` | `key`, `tokens`, `at` | Token buckets (`act:<table>:<user>`, `lookup:<user>`); idle ones are deleted daily. |
 | `config` | `key`, `on` | Feature flags (§12); a missing row means on. |
@@ -127,7 +130,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - **Cleanup:** `crons.ts` runs `tables.cleanup` daily: deletes lobbies never started within 24 h and running tables every human has been away from for 24 h (`STALE_TABLE_MS`). Finished tables are history and stay.
 - **Ratings:** a table is rated or not from creation (`tables.create({ rated })`). Rated tables need four different account holders: no bots, no guests (`ratedBlocker`). On game end the same mutation writes `games`, updates `ratings` and appends `ratingHistory` (`convex/ratings.ts` → pure `convex/lib/ratingLogic.ts` → `src/ratings/`). The quartet cap (3 rated games per 24 h for the same four) turns extra games unrated. The **per-opponent daily gain cap** (`DAILY_GAIN_CAP`, 4 display points in 24 h) stops win-trading with rotating partners: a winner gains at most the room left against the opponent they already took most from that day (the game still counts; the cut comes off `mu`, losses are untouched; `capGain`/`gainsByOpponent` in `ratingLogic.ts`). `ratings.leaderboard` is public and lists players with 10+ rated matches and an account at least 7 days old (`LEADERBOARD_MIN_AGE_MS`) by name only.
 - **Rate limits:** token buckets in `rateLimits` (`lib/rateLimit.ts`). `tables.act` allows a burst of 10 moves per user per table, then one per 250 ms (`ACT_LIMIT`), and answers `RATE_LIMITED` beyond that; turn timers and bot steps are internal and never limited. Convex rolls back a failed mutation, so a move rejected for another reason (not your turn, illegal) returns its token: the bucket caps accepted moves, not attempts. The daily cleanup deletes buckets idle for a day.
-- **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`); the client maps them to translated messages. Never leak internal state in an error.
+- **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`, `NAME_NOT_ALLOWED`, `RENAME_TOO_SOON`, `BLOCKED`, `CODE_EXPIRED`, `FEATURE_OFF`, …); the client maps them to translated messages. Never leak internal state in an error.
 
 ## 8. Client design
 
@@ -155,7 +158,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - Three ways in, all via Convex Auth, none required for local play: **guest** (display name only, session lives in the browser), **username + password** (persistent, no email, see §15) and **Google OAuth**. Secrets (`AUTH_GOOGLE_SECRET`, JWT keys, `CONVEX_DEPLOY_KEY`) live only in Convex dashboard / GitHub Actions secrets. Never in the repo, logs, or client bundle. (`scripts/convex-auth-setup.mjs` already refuses to log them.)
 - Every mutation and every non-public query starts with an auth guard from `convex/lib/auth.ts` (`requireUser(ctx)`); there is no function that skips it by accident. Public queries are listed explicitly (e.g. public leaderboard).
 - Authorisation is checked per object: host-only actions (start, kick, change options), member-only reads, owner-only profile edits.
-- Account deletion endpoint (GDPR: players in HR/DE/AT/CH are in the EU/EEA or Swiss regime): deletes or anonymises profile, keeps anonymised game records for other players' histories.
+- Account deletion (GDPR: players in HR/DE/AT/CH are in the EU/EEA or Swiss regime), **built**: `users.deleteAccount`, from *My account* (`/account`) after a confirmation. The player leaves every table through the same `leaveTable` as `tables.leave` (lobby: seat freed, host handed on, empty table deleted; friendly game: a bot keeps the seat; rated game: abandoned, their team loses). Their name is replaced by `DELETED_NAME` in every seat they hold (`anonymiseSeats`). Deleted: Convex Auth accounts, verification codes, sessions, refresh tokens and verifiers; rating and rating history; memberships and presence; blocks, mutes and reports in both directions. The `users` row is replaced by `{name: DELETED_NAME, deletedAt}` so `games.players` and other players' histories keep working; `requireUser` refuses a deleted user, so a token issued before the deletion stops working at once. Tested in `tests/convex/deleteAccount.test.ts`, which scans every table for the name and email. Known gap: a friendly game the player had *earlier* left mid-game kept a bot under their name (no link back to them), and that name stays.
 
 ### 9.3 Input & data
 - Every function declares `args` with `v.*` validators, with length and range limits (display name ≤ 24 chars, trimmed, no control chars). Engine actions are additionally checked against `legalActions`.
@@ -165,10 +168,12 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - Private tables are unlisted and not enumerable; public lobby (later) shows only what a joiner needs.
 
 ### 9.4 Abuse & privacy
-- Rate limits on table creation, invites, friend requests, name changes.
-- Block/mute and report for users; moderation actions logged. Offensive-name filter at profile save.
+- Rate limits on table creation, invites, friend requests, name changes (built: 3 renames per 24 h, `RENAME_TOO_SOON`; 10 reports per day).
+- **Names** (built): `convex/lib/names.ts` checks every chosen name: guest sign-in, username sign-up (not sign-in, so a list change never locks anyone out) and `users.rename`. It lowercases, strips diacritics (đ → d), undoes leetspeak (0→o, 1→i, 4→a, @→a…), drops separators and collapses repeated letters, then looks for Croatian and English roots; a short allow-list covers real names that contain one. Refused names get `NAME_NOT_ALLOWED`. Google names are not filtered. Names stay **non-unique** (§14.1). Renaming changes the name for new tables; seats at existing tables keep the old one.
+- **Block, mute, report** (built, `convex/moderation.ts`): players pick another human by *seat* at a table they share (never by a client-sent user id), from *Players at this table* on the table page. Block: `tables.join` refuses (`BLOCKED`) when either side has blocked anyone seated. Mute: private; `moderation.mutedSeats({code})` gives the seats whose emotes and quick phrases the page should hide. Report: fixed reason, one open report per pair, shown in `/admin` where an admin dismisses it or resets the name to `Igrač`. Reports, blocks, unblocks and admin decisions go to `moderationLog`; mutes are not logged. Unblock and unmute from *My account*. `tables.rematch` leaves the seat of anyone blocked with the player who asks for it empty.
 - Store the minimum personal data: display name, and for Google users avatar and email (never shown). Username accounts store no real email at all, so they have **no password recovery** (a known trade-off, revisit with email verification). Region is self-declared, coarse (country/city), optional.
-- No third-party trackers in v1. If analytics are added: cookieless, aggregate, disclosed in a privacy page.
+- No third-party trackers in v1. If analytics are added: cookieless, aggregate, disclosed in the privacy page.
+- **Privacy page** `/privacy` (hr + en, `src/pages/Privacy.tsx`), linked from the menu and the sign-in dialog: what the browser and the server store, processors (Convex, GitHub Pages, Google Fonts and Google sign-in), no tracking, retention and how deletion works. Keep it in step with `convex/schema.ts`. It names no controller contact yet.
 
 ### 9.5 Web & supply chain
 - CSP via `<meta>` (GitHub Pages can't set headers), added to production builds by `config/csp.ts`: `script-src 'self'` (no inline scripts, no eval), `connect-src` only this build's own Convex deployment (https + wss), Google Fonts and Google avatars allowed, `object-src 'none'`. Not in dev, where Vite injects an inline script.
@@ -202,7 +207,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 | E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. |
 | UI | Vitest + Testing Library (sparingly) | Language switch, legal-card hints, accessibility smoke. |
 
-CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build → `npm audit` (prod, high), and an **e2e** job: `npm run e2e` starts a throwaway local Convex backend (`CONVEX_AGENT_MODE=anonymous`, no account or secrets), builds against it and runs Playwright (`e2e/`): two browser contexts create, join and play a table and reconnect; local play on desktop and phone; console errors (incl. CSP violations) fail the test. `deploy.yml` (on `main`) lints, tests and deploys Pages + Convex. Actions are pinned to commit SHAs; Dependabot updates npm and actions weekly. A red check blocks merge.
+CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build → `npm audit` (prod, high), and an **e2e** job: `npm run e2e` starts a throwaway local Convex backend (`CONVEX_AGENT_MODE=anonymous`, no account or secrets), builds against it and runs Playwright (`e2e/`): two browser contexts create, join and play a table and reconnect; a player renames, blocks and reports another, then deletes their account (`e2e/account.spec.ts`); local play on desktop and phone; console errors (incl. CSP violations) fail the test. `deploy.yml` (on `main`) lints, tests and deploys Pages + Convex. Actions are pinned to commit SHAs; Dependabot updates npm and actions weekly. A red check blocks merge.
 
 ## 12. Observability & operations
 
@@ -223,7 +228,7 @@ How-to and dashboard steps: [operations.md](operations.md).
 
 ## 14. Open decisions (record as ADRs when settled)
 
-1. Display names: guests and username accounts pick their own (2–24 chars, not unique; `users.rename` exists, no UI yet). Google name by default for Google users? Uniqueness rules? Offensive-name filter?
+1. Display names: guests and username accounts pick their own (2–24 chars, filtered, renamed on *My account*, 3 times a day). Still open: uniqueness (names are **not** unique today), and whether Google names should be filtered or replaced.
 2. Do signed-in local games against bots count for personal stats (unrated)?
 3. Default timer profile per mode (quick vs long game, rated vs friendly). Profiles exist (§7: relaxed / normal / quick, host's choice per table); every table still defaults to normal (90 s grace, 45 s per move, 30 s on the hand summary). Open: should 1001 or rated tables default differently?
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?

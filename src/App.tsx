@@ -1,5 +1,6 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AccountProvider } from './account/account';
+import { AccountPage } from './account/AccountPage';
 import { I18nProvider } from './i18n/i18n';
 import { AdminPage } from './admin/AdminPage';
 import { OnlineLobbyPage } from './online/OnlineLobby';
@@ -8,6 +9,7 @@ import { History } from './pages/History';
 import { Leaderboard } from './pages/Leaderboard';
 import { Home } from './pages/Home';
 import { Play } from './pages/Play';
+import { Privacy } from './pages/Privacy';
 import { Rules } from './pages/Rules';
 import { SettingsProvider } from './ui/settings';
 
@@ -26,6 +28,8 @@ export function App() {
               <Route path="/history" element={<History />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="*" element={<Home />} />
             </Routes>
           </HashRouter>
