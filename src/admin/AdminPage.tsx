@@ -132,12 +132,12 @@ function Admin() {
                 </div>
                 <div className="stat">
                   <div className="stat-title">Moves stored</div>
-                  <div className="stat-value">{overview.usage.actions}</div>
+                  <div className="stat-value">{overview.usage.actions.toLocaleString('en')}</div>
                 </div>
                 <div className="stat">
                   <div className="stat-title">Function calls (est.)</div>
-                  <div className="stat-value">{overview.usage.estimatedCalls}</div>
-                  <div className="stat-desc">of {overview.usage.quota} per month</div>
+                  <div className="stat-value">{overview.usage.estimatedCalls.toLocaleString('en')}</div>
+                  <div className="stat-desc">of {overview.usage.quota.toLocaleString('en')} per month</div>
                 </div>
               </div>
               <p className="text-sm opacity-70">
