@@ -89,6 +89,13 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                   </NavLink>
                 </li>
               )}
+              {online && (
+                <li>
+                  <NavLink to="/leaderboard" onClick={close}>
+                    {t('menu.leaderboard')}
+                  </NavLink>
+                </li>
+              )}
               {GAMES.map((g) =>
                 g.available ? (
                   <li key={g.id}>

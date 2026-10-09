@@ -10,11 +10,14 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_errors from "../lib/errors.js";
+import type * as lib_ratingLogic from "../lib/ratingLogic.js";
 import type * as lib_tableLogic from "../lib/tableLogic.js";
+import type * as ratings from "../ratings.js";
 import type * as tables from "../tables.js";
 import type * as users from "../users.js";
 
@@ -27,11 +30,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  crons: typeof crons;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/config": typeof lib_config;
   "lib/errors": typeof lib_errors;
+  "lib/ratingLogic": typeof lib_ratingLogic;
   "lib/tableLogic": typeof lib_tableLogic;
+  ratings: typeof ratings;
   tables: typeof tables;
   users: typeof users;
 }>;

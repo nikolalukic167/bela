@@ -10,7 +10,7 @@ export function newBackend() {
 export type Backend = ReturnType<typeof newBackend>;
 
 /** A signed-in client for a fresh user. Convex Auth's subject is "<userId>|<sessionId>". */
-export async function signUp(t: Backend, name: string, flags: { isAdmin?: boolean } = {}) {
+export async function signUp(t: Backend, name: string, flags: { isAdmin?: boolean; isAnonymous?: boolean } = {}) {
   const userId = await t.run((ctx) => ctx.db.insert('users', { name, isAnonymous: true, ...flags }));
   return { userId, as: t.withIdentity({ subject: `${userId}|session` }) };
 }

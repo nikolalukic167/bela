@@ -11,7 +11,9 @@ export type TableErrorCode =
   | 'ILLEGAL_ACTION'
   | 'WRONG_STATE'
   | 'INVALID_INPUT'
-  | 'RATE_LIMITED';
+  | 'RATE_LIMITED'
+  | 'RATED_NEEDS_FOUR'
+  | 'RATED_NEEDS_ACCOUNTS';
 
 export class TableError extends ConvexError<{ code: TableErrorCode }> {
   constructor(code: TableErrorCode) {

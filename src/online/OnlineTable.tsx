@@ -192,6 +192,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             <div className="flex items-center gap-2">
               <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
               {data.isTest && <span className="badge badge-warning">test</span>}
+              {data.rated && <span className="badge badge-primary">{t('online.rated')}</span>}
             </div>
             {lobby && (
               <>
@@ -259,7 +260,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
           )}
           {lobby && data.isHost && (
             <>
-              <button type="button" className="btn" disabled={!hasEmpty} onClick={() => void guard(() => addBot({ code }))}>
+              <button type="button" className="btn" disabled={!hasEmpty || data.rated} onClick={() => void guard(() => addBot({ code }))}>
                 {t('online.addBot')}
               </button>
               <button type="button" className="btn btn-primary h-[52px] w-full rounded-2xl text-[17px] order-first" onClick={() => void guard(() => start({ code }))}>
@@ -285,7 +286,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             {t('online.back')}
           </Link>
         </div>
-        {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t('online.startHint')}</p>}
+        {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t(data.rated ? 'online.ratedHint' : 'online.startHint')}</p>}
         {!lobby && !seated && <p className="text-sm opacity-70 mt-3">{t('online.watching')}</p>}
       </main>
     </AppShell>

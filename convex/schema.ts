@@ -65,6 +65,8 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     /** The table a finished one continues at (`tables.rematch`). */
     rematchCode: v.optional(v.string()),
+    /** Set at creation and never changed (architecture §1.6): four account holders, results rated. */
+    rated: v.optional(v.boolean()),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])
@@ -97,6 +99,48 @@ export default defineSchema({
     userId: v.id('users'),
     lastSeen: v.number(),
   }).index('by_table_user', ['tableId', 'userId']),
+
+  // One row per finished online match (rated or not): the record ratings and stats derive from.
+  games: defineTable({
+    tableId: v.id('tables'),
+    /** User per seat; null for bots. */
+    players: v.array(v.union(v.id('users'), v.null())),
+    scores: v.array(v.number()),
+    winner: v.number(),
+    rated: v.boolean(),
+    endReason: v.union(v.literal('normal'), v.literal('abandoned')),
+    abandonedBy: v.optional(v.id('users')),
+    /** Sorted user ids of a rated four, for the quartet cap. */
+    quartetKey: v.optional(v.string()),
+    endedAt: v.number(),
+  })
+    .index('by_table', ['tableId'])
+    .index('by_quartet', ['quartetKey', 'endedAt']),
+
+  // OpenSkill rating per player (scope "solo"; pair ratings come with phase 4).
+  ratings: defineTable({
+    userId: v.id('users'),
+    mu: v.number(),
+    sigma: v.number(),
+    gamesPlayed: v.number(),
+    lastPlayedAt: v.union(v.number(), v.null()),
+    /** mu - 3·sigma, what the leaderboard sorts by. */
+    display: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_display', ['display']),
+
+  // One point per player per rated game: feeds the rating graph.
+  ratingHistory: defineTable({
+    userId: v.id('users'),
+    gameId: v.id('games'),
+    mu: v.number(),
+    sigma: v.number(),
+    display: v.number(),
+    /** Display rating change in this game. */
+    delta: v.number(),
+    at: v.number(),
+  }).index('by_user', ['userId', 'at']),
 
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({
