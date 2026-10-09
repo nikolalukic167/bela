@@ -95,7 +95,7 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | Table | Key fields | Notes |
 |---|---|---|
 | `users` | auth fields, `isAnonymous` (guest), `isAdmin`, `isBot`, `isTest`, `renameTimes`, `deletedAt`; later `country`, `city`, `locale` | Our flags are optional so Convex Auth can create users. `isAdmin` is granted only from the Convex dashboard (§15). A deleted account is a stub `{name, deletedAt}` (§9.2). |
-| `tables` | `code`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
+| `tables` | `code`, `codeExpiresAt`, `timerProfile`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
 | `tableStates` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. `version` is bumped per action; scheduled steps carry the version they expect, so a stale one is a no-op. |
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
@@ -106,6 +106,10 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | `blocks`, `mutes` | `userId` + `blockedId` / `mutedId` | Block keeps both sides off each other's tables; mute is private to the muter (§9.4). |
 | `reports` | `reporterId`, `reportedId`, `reason` (name/abuse/cheating/other), `tableCode`, `status`, `resolution` | Reviewed in `/admin`. Fixed reasons, no free text. |
 | `moderationLog` | `actorId`, `action` (report/block/unblock/dismiss/resetName), `targetId`, `reportId`, `at` | Append-only. Ids only, no names. |
+| `retiredCodes` | `code`, `tableId` | Invite codes the host replaced; resolve only for players seated at that table (§9.3). |
+| `rateLimits` | `key`, `tokens`, `at` | Token buckets (`act:<table>:<user>`, `lookup:<user>`); idle ones are deleted daily. |
+| `config` | `key`, `on` | Feature flags (§12); a missing row means on. |
+| `usage` | `day`, `tables`, `actions`, `games` | Per-UTC-day counts from the quota-watch cron (§12). |
 | `pairs` | `userA`, `userB` (ordered), `status`, rating via `ratings` | Both must accept. Planned. |
 | `friendships`, `invites` | pair of users + status; code, expiry, uses | Invites expire and are single-purpose. Planned. |
 | `leagues`, `tournaments`, `clubs` | later phases | Added with their phase, not before. |
@@ -119,12 +123,14 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - **Act flow** (`tables.act`): resolve caller → seat from the table (never from args) → check it is that seat's turn → check `action ∈ legalActions` → `apply` → append to `actions` → bump `version` (optimistic concurrency; retry on conflict) → schedule next system step.
 - **Scheduled functions** drive everything time-based: bot moves (with a small human-like delay), trick collection, turn timers, reconnect grace expiry, abandoned-table cleanup. All idempotent and version-checked: a stale timer is a no-op.
 - **Bots** decide from `view(seat)` only, through the same `bot(v, rng)` used offline. Online tables offer easy / medium / hard: expert (PIMC, ~700 ms per move) would exceed Convex's mutation time limit, so it stays offline-only. A whole hard match costs about 75 ms of bot compute, so "fast" test tables play many moves per call. They are marked `{bot: true}` in seats and are excluded from rating updates (and make the game unrated).
-- **Reconnect:** an open table page sends `tables.heartbeat` every 20 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for 90 s (`RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. In a **rated** game there is no stand-in: leaving or dropping past the grace period ends the match as `abandoned`, the leaver's team loses, and only the leaver (not their partner) takes the rating loss. Still planned: per-table grace.
-- **Turn timers:** while the table waits on a human, `scheduleNext` arms `tables.timeout` (version-checked). 45 s per move (`TURN_TIMEOUT_MS`), then the server plays a medium bot's move for that seat, which they keep; an unclicked hand summary deals on after 30 s (`NEXT_HAND_TIMEOUT_MS`). `watch` returns the `deadline`; the page counts down the last 20 s.
+- **Reconnect:** an open table page sends `tables.heartbeat` every 20 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for 90 s (`RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. In a **rated** game there is no stand-in: leaving or dropping past the grace period ends the match as `abandoned`, the leaver's team loses, and only the leaver (not their partner) takes the rating loss. The grace period comes from the table's timer profile.
+- **Turn timers:** while the table waits on a human, `scheduleNext` arms `tables.timeout` (version-checked). When the move time runs out, the server plays a medium bot's move for that seat, which they keep; an unclicked hand summary deals on by itself. `watch` returns the `deadline`; the page counts down the last 20 s.
+- **Timer profiles** (§14.3): the host picks one at creation (`tables.create({ timerProfile })`); it is stored on the table, never changes, and a rematch keeps it. `timeoutFor` and the presence check read it (`TIMER_PROFILES` in `lib/config.ts`): **relaxed** 180 s grace / 90 s per move / 60 s summary, **normal** (default, the original) 90 / 45 / 30 s, **quick** 45 / 20 / 15 s.
 - **Rematch:** `tables.rematch` on a finished table opens one lobby with the same seats and options (away players seated in person again); the old table stores `rematchCode`, so everyone lands at the same table.
 - **Cleanup:** `crons.ts` runs `tables.cleanup` daily: deletes lobbies never started within 24 h and running tables every human has been away from for 24 h (`STALE_TABLE_MS`). Finished tables are history and stay.
-- **Ratings:** a table is rated or not from creation (`tables.create({ rated })`). Rated tables need four different account holders: no bots, no guests (`ratedBlocker`). On game end the same mutation writes `games`, updates `ratings` and appends `ratingHistory` (`convex/ratings.ts` → pure `convex/lib/ratingLogic.ts` → `src/ratings/`). The quartet cap (3 rated games per 24 h for the same four) turns extra games unrated. `ratings.leaderboard` is public and lists players with 10+ rated matches by name only.
-- **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`, `NAME_NOT_ALLOWED`, `RENAME_TOO_SOON`, `BLOCKED`, …); the client maps them to translated messages. Never leak internal state in an error.
+- **Ratings:** a table is rated or not from creation (`tables.create({ rated })`). Rated tables need four different account holders: no bots, no guests (`ratedBlocker`). On game end the same mutation writes `games`, updates `ratings` and appends `ratingHistory` (`convex/ratings.ts` → pure `convex/lib/ratingLogic.ts` → `src/ratings/`). The quartet cap (3 rated games per 24 h for the same four) turns extra games unrated. The **per-opponent daily gain cap** (`DAILY_GAIN_CAP`, 4 display points in 24 h) stops win-trading with rotating partners: a winner gains at most the room left against the opponent they already took most from that day (the game still counts; the cut comes off `mu`, losses are untouched; `capGain`/`gainsByOpponent` in `ratingLogic.ts`). `ratings.leaderboard` is public and lists players with 10+ rated matches and an account at least 7 days old (`LEADERBOARD_MIN_AGE_MS`) by name only.
+- **Rate limits:** token buckets in `rateLimits` (`lib/rateLimit.ts`). `tables.act` allows a burst of 10 moves per user per table, then one per 250 ms (`ACT_LIMIT`), and answers `RATE_LIMITED` beyond that; turn timers and bot steps are internal and never limited. Convex rolls back a failed mutation, so a move rejected for another reason (not your turn, illegal) returns its token: the bucket caps accepted moves, not attempts. The daily cleanup deletes buckets idle for a day.
+- **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`, `NAME_NOT_ALLOWED`, `RENAME_TOO_SOON`, `BLOCKED`, `CODE_EXPIRED`, `FEATURE_OFF`, …); the client maps them to translated messages. Never leak internal state in an error.
 
 ## 8. Client design
 
@@ -143,10 +149,10 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 ### 9.1 Game integrity
 - Server-side engine; clients get `view(seat)` only. A test asserts that, for every phase of a simulated game, JSON-serialised `view(s, seat)` contains none of the other seats' cards, talon cards, or the seed. This test is a release gate.
 - Seat identity comes from `getAuthUserId` + table lookup, never from a request argument.
-- Shuffle seed generated **on the server** with `crypto.getRandomValues`, stored in `tableState` only. Reveal it after the game ends (enables replay verification).
-- Rate-limit actions per user per table; reject actions arriving with a stale `version`.
+- Shuffle seed generated **on the server** with `crypto.getRandomValues`, stored in `tableState` only. `watch` reveals it (`seed`) once the table is `finished`, never before: seed + `options` + the action log replay the match to its result (`replay` in `tableLogic.ts`; tested in `tests/convex/seedReveal.test.ts`, which also checks every phase of a live game for the seed).
+- Rate-limit actions per user per table (built: `ACT_LIMIT`, §7); reject actions arriving with a stale `version`.
 - Collusion: partners cannot be stopped from talking off-platform. Mitigate with emote-only chat, no live partner hand reveal, and flagging for statistically suspicious pairs later. Don't promise more than that.
-- Rating abuse: friendlies and bot games are unrated; rated games need distinct accounts; per-opponent daily rating-gain cap against win-trading; account-age/games-played gate for leaderboards.
+- Rating abuse: friendlies and bot games are unrated; rated games need distinct accounts; per-opponent daily rating-gain cap against win-trading; account-age/games-played gate for leaderboards (all built, §7).
 
 ### 9.2 Authentication & sessions
 - Three ways in, all via Convex Auth, none required for local play: **guest** (display name only, session lives in the browser), **username + password** (persistent, no email, see §15) and **Google OAuth**. Secrets (`AUTH_GOOGLE_SECRET`, JWT keys, `CONVEX_DEPLOY_KEY`) live only in Convex dashboard / GitHub Actions secrets. Never in the repo, logs, or client bundle. (`scripts/convex-auth-setup.mjs` already refuses to log them.)
@@ -157,7 +163,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 ### 9.3 Input & data
 - Every function declares `args` with `v.*` validators, with length and range limits (display name ≤ 24 chars, trimmed, no control chars). Engine actions are additionally checked against `legalActions`.
 - Never trust client-provided IDs for ownership; look up and compare.
-- Invite codes: 8+ chars from a non-guessable alphabet (CSPRNG), expire (e.g. 24 h), rate-limited lookups, revocable by host.
+- Invite codes (built): 8 chars from the unambiguous alphabet via `crypto.getRandomValues` (31⁸ ≈ 8.5·10¹¹ codes). A code admits new players for 24 h (`INVITE_TTL_MS`, then `CODE_EXPIRED`); seated players can always come back. The host can revoke it (`tables.newCode`): the old code goes to `retiredCodes`, still resolves for seated players (their page follows `watch().code` to the new one) and for nobody else. `join` with an unknown or hidden code returns `null` instead of throwing, so the spent token of the per-user lookup bucket (`LOOKUP_LIMIT`: 10, then one per 30 s) is kept; past it, `RATE_LIMITED`. Tables from before keep their 6-character codes and never expire.
 - Rendering: React escapes by default; never use `dangerouslySetInnerHTML` with user data. Display names and chat render as text.
 - Private tables are unlisted and not enumerable; public lobby (later) shows only what a joiner needs.
 
@@ -205,10 +211,13 @@ CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build
 
 ## 12. Observability & operations
 
-- Structured server logs with `tableId`/`gameId`, **never** hands, seeds of live games, tokens, or emails.
-- Counters to watch against the Convex free tier: function calls/month (~2,300 per match), storage. Alert at 70% of quota; the action log is compacted into `games` summaries after N days for friendlies (rated logs are kept for replay and disputes).
-- Backups: Convex snapshot export on a schedule for production.
-- Feature flags (a `config` table or env) for risky rollouts: ratings on/off, tournaments on/off.
+How-to and dashboard steps: [operations.md](operations.md).
+
+- **Structured logs** (built): `logEvent` (`convex/lib/log.ts`) writes one JSON line per key event (table created/started, code replaced, stand-in/reclaim, game finished, rate limited, flag changed, cleanup, usage, quota warning, compaction) with `tableId`/`gameId`. Its field list is closed: **never** hands, seeds of live games, state, tokens, or emails.
+- **Quota watch** (built): against the Convex free tier (1M function calls/month, 0.5 GB storage). A daily cron (`maintenance.countUsage`) counts the previous UTC day's tables and actions (paged) into `usage`; the admin panel sums 30 days, estimates calls as actions × 5 (`CALLS_PER_ACTION`; ~2,300 per match) and warns at 70% (`QUOTA_WARN_AT`), and the cron logs `quota.warning`.
+- **Action-log compaction** (built): the action log of finished **unrated** non-test tables is deleted after 30 days (`maintenance.compactLogs`); their `games` row and final state stay. Rated logs are kept for replay and disputes.
+- **Backups:** Convex snapshot export, scheduled on the Pro plan or by CLI export (`npx convex export --prod`); steps in operations.md.
+- **Feature flags** (built): rows in `config`, switched in the admin panel, missing means on: `ratings` (off: no new rated tables, no rating changes), `rematch`, `chat`. `flags.list` is public. Tournaments get a flag when they exist.
 - Cost fallback: if the free tier is exceeded, the order of reduction is turn timers → bot delay ticks → view refresh frequency; the upgrade path is Convex paid plan, not a rewrite.
 
 ## 13. Business features, without compromising the above
@@ -221,7 +230,7 @@ CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build
 
 1. Display names: guests and username accounts pick their own (2–24 chars, filtered, renamed on *My account*, 3 times a day). Still open: uniqueness (names are **not** unique today), and whether Google names should be filtered or replaced.
 2. Do signed-in local games against bots count for personal stats (unrated)?
-3. Reconnect grace and turn-timer defaults per mode (quick vs long game). Current defaults: 90 s grace, 45 s per move, 30 s on the hand summary, same for every table.
+3. Default timer profile per mode (quick vs long game, rated vs friendly). Profiles exist (§7: relaxed / normal / quick, host's choice per table); every table still defaults to normal (90 s grace, 45 s per move, 30 s on the hand summary). Open: should 1001 or rated tables default differently?
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
 5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
 6. When (if ever) to open a public lobby; minimum concurrent-player threshold.
@@ -241,8 +250,8 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 - Tools: **Seed** (6 bot accounts, an open lobby to join, one live bot match, two finished ones), **Start a bot match** (level, live or fast, target), **Delete test data** (removes only `isTest` rows, including their action logs).
 - The panel is English-only: it is an internal tool, an explicit exception to the i18n rule in §8.
 
-**Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 6 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`. Names are validated server-side (2–24 chars, no control characters).
+**Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 8 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`, and expire for joining after 24 h (§9.3; older tables keep 6). Names are validated server-side (2–24 chars, no control characters).
 
 **Reconnect** is built (§7): heartbeats, a 90 s grace period, stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
 
-**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: per-table grace and timer settings, personal stats page, action-log compaction for old friendlies.
+**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: personal stats page.

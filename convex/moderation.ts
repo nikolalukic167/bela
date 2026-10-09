@@ -8,15 +8,15 @@ import { NEUTRAL_NAME, REPORT_LIMIT, REPORT_WINDOW_MS } from './lib/config';
 import { TableError } from './lib/errors';
 import { humanAt, seatTarget } from './lib/moderationLogic';
 import type { Seat } from './lib/tableLogic';
-import { tableByCode, visibleTo } from './tables';
+import { findTable } from './tables';
 
 const seatArgs = { code: v.string(), seat: v.number() };
 const reasonValidator = v.union(v.literal('name'), v.literal('abuse'), v.literal('cheating'), v.literal('other'));
 
 /** The human at `seat` of a table the caller sits at. */
 async function target(ctx: QueryCtx, user: Doc<'users'>, code: string, seat: number): Promise<{ table: Doc<'tables'>; userId: Id<'users'> }> {
-  const table = await tableByCode(ctx, code);
-  if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+  const table = await findTable(ctx, code, user);
+  if (!table) throw new TableError('NOT_FOUND');
   return { table, userId: seatTarget(table.seats as Seat[], seat, user._id) };
 }
 
@@ -89,8 +89,8 @@ export const mutedSeats = query({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) return [];
+    const table = await findTable(ctx, code, user);
+    if (!table) return [];
     const muted = new Set((await ctx.db.query('mutes').withIndex('by_user', (q) => q.eq('userId', user._id)).collect()).map((m) => m.mutedId));
     const seats = table.seats as Seat[];
     return seats.flatMap((_, seat) => {

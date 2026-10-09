@@ -39,7 +39,7 @@ test('rename, block a player, then delete the account', async ({ browser }) => {
   await ana.page.goto('#/online');
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
-  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{6}$/);
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
   const link = ana.page.url();
   await bruno.page.goto(link);
   await bruno.page.getByRole('button', { name: 'Sjedni za stol' }).click();

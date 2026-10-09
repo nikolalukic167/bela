@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../convex/_generated/api';
-import { HEARTBEAT_MS, RECONNECT_GRACE_MS } from '../../convex/lib/config';
+import { DAILY_GAIN_CAP, HEARTBEAT_MS, LEADERBOARD_MIN_AGE_MS, RECONNECT_GRACE_MS } from '../../convex/lib/config';
 import { elapse, newBackend, OPTIONS, signUp, type Backend } from './setup';
 
 beforeEach(() => vi.useFakeTimers());
@@ -91,6 +91,32 @@ describe('rated tables', () => {
   });
 });
 
+describe('win-trading guard', () => {
+  it('a winner who already took the daily cap off these opponents gains nothing more today', async () => {
+    const t = newBackend();
+    const { players, c } = await ratedTable(t);
+    // Earlier today the same four played and everyone "gained" the full cap off the other pair.
+    await t.run(async (ctx) => {
+      const tableId = (await ctx.db.query('tables').first())!._id;
+      const ids = players.map((p) => p.userId);
+      const gameId = await ctx.db.insert('games', { tableId, players: ids, scores: [501, 0], winner: 0, rated: true, endReason: 'normal', endedAt: Date.now() });
+      for (const userId of ids) await ctx.db.insert('ratingHistory', { userId, gameId, mu: 25, sigma: 8, display: 1, delta: DAILY_GAIN_CAP, at: Date.now() });
+    });
+    await players[0].as.mutation(api.tables.start, { code: c });
+    await nearTheEnd(t);
+    await keepAlive(t, c, 60 * 60_000, players, 5000);
+    const w = await players[0].as.query(api.tables.watch, { code: c });
+    expect(w?.status).toBe('finished');
+    const mine = await Promise.all(players.map((p) => p.as.query(api.ratings.mine, {})));
+    for (const [seat, r] of mine.entries()) {
+      const last = r!.history.at(-1)!;
+      if (seat % 2 === w!.result!.winner) expect(last.delta).toBeCloseTo(0, 1);
+      else expect(last.delta).toBeLessThan(0);
+      expect(r?.games).toBe(1); // still a rated game for everyone
+    }
+  });
+});
+
 describe('unrated games', () => {
   it('are recorded as games but change no rating', async () => {
     const t = newBackend();
@@ -117,11 +143,28 @@ describe('leaderboard', () => {
         await ctx.db.insert('ratings', { userId, ...r, gamesPlayed: games, lastPlayedAt: 0, display: r.mu - 3 * r.sigma });
       }
     });
+    vi.advanceTimersByTime(LEADERBOARD_MIN_AGE_MS + 1000);
     const board = await t.query(api.ratings.leaderboard, {});
     expect(board.map((r) => [r.rank, r.name])).toEqual([
       [1, 'High'],
       [2, 'Low'],
     ]);
     expect(Object.keys(board[0]).sort()).toEqual(['games', 'name', 'rank', 'rating']);
+  });
+});
+
+describe('leaderboard account-age gate', () => {
+  it('leaves out accounts younger than the minimum age, however many games they have', async () => {
+    const t = newBackend();
+    const add = (name: string) =>
+      t.run(async (ctx) => {
+        const userId = await ctx.db.insert('users', { name, isAnonymous: false });
+        await ctx.db.insert('ratings', { userId, mu: 30, sigma: 3, gamesPlayed: 40, lastPlayedAt: 0, display: 21 });
+      });
+    await add('Old');
+    vi.advanceTimersByTime(LEADERBOARD_MIN_AGE_MS - 60_000);
+    await add('Fresh');
+    vi.advanceTimersByTime(60_000);
+    expect((await t.query(api.ratings.leaderboard, {})).map((r) => r.name)).toEqual(['Old']);
   });
 });
