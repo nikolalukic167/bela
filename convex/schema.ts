@@ -63,8 +63,11 @@ export default defineSchema({
     createdAt: v.number(),
     /** When the match ended; older rows fall back to createdAt. */
     finishedAt: v.optional(v.number()),
+    /** The table a finished one continues at (`tables.rematch`). */
+    rematchCode: v.optional(v.string()),
   })
     .index('by_code', ['code'])
+    .index('by_status', ['status', 'createdAt'])
     .index('by_host', ['hostId'])
     .index('by_test', ['isTest', 'createdAt']),
 
@@ -75,6 +78,8 @@ export default defineSchema({
     version: v.number(),
     /** When the turn timer runs out for the humans to move (shown as a countdown). */
     deadline: v.optional(v.number()),
+    /** When the last move was made; the cleanup cron uses it. */
+    lastMoveAt: v.optional(v.number()),
   }).index('by_table', ['tableId']),
 
   // Append-only action log (seed + options + actions rebuild any game).

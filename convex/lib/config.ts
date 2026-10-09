@@ -13,6 +13,8 @@ export const HEARTBEAT_MS = 20_000;
 export const TURN_TIMEOUT_MS = 45_000;
 /** Nobody pressed "next" on the hand summary: the server deals on. */
 export const NEXT_HAND_TIMEOUT_MS = 30_000;
+/** Lobbies never started, and tables everyone walked away from, are deleted after this. */
+export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
 export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;

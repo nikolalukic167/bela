@@ -11,6 +11,7 @@ import {
   MAX_ACTIVE_TABLES_PER_USER,
   NEXT_HAND_DELAY_MS,
   RECONNECT_GRACE_MS,
+  STALE_TABLE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
 import {
@@ -21,12 +22,14 @@ import {
   fillWithBots,
   firstEmpty,
   humanCount,
+  isAbandoned,
   isFinished,
   makeCode,
   moverOf,
   ownSeat,
   presenceCheck,
   reclaimSeat,
+  rematchSeats,
   seatOf,
   standIn,
   startState,
@@ -118,7 +121,7 @@ export async function commit(
   for (const [i, m] of moves.entries()) {
     await ctx.db.insert('actions', { tableId: table._id, seq: row.version + i, seat: m.seat, action: m.action });
   }
-  await ctx.db.patch(row._id, { state, version });
+  await ctx.db.patch(row._id, { state, version, lastMoveAt: Date.now() });
   const next = { ...row, state, version };
   if (isFinished(state)) {
     await ctx.db.patch(table._id, { status: 'finished', result: { scores: [...state.scores], winner: state.winner ?? 0 }, finishedAt: Date.now() });
@@ -355,6 +358,68 @@ export const checkPresence = internalMutation({
   },
 });
 
+/**
+ * After a match, any of its players opens the rematch: a lobby with the same seating and
+ * options, hosted by them. Everyone else asking gets the same table.
+ */
+export const rematch = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const user = await requireUser(ctx);
+    const table = await tableByCode(ctx, code);
+    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    if (ownSeat(table.seats as Seat[], user._id) < 0) throw new TableError('FORBIDDEN');
+    if (table.status !== 'finished') throw new TableError('WRONG_STATE');
+    if (table.rematchCode) {
+      const existing = await tableByCode(ctx, table.rematchCode);
+      if (existing) return existing.code;
+    }
+    if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
+    const free = new Set<Id<'users'>>([user._id]);
+    for (const s of table.seats as Seat[]) {
+      const id = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
+      if (id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER) free.add(id);
+    }
+    const seats = rematchSeats(table.seats as Seat[], (id) => free.has(id));
+    const next = await uniqueCode(ctx);
+    const tableId = await ctx.db.insert('tables', {
+      code: next,
+      hostId: user._id,
+      options: table.options,
+      status: 'lobby',
+      seats,
+      isTest: table.isTest,
+      speed: table.speed,
+      createdAt: Date.now(),
+    });
+    for (const s of seats) if (s.kind === 'user') await ctx.db.insert('memberships', { userId: s.userId, tableId });
+    await ctx.db.patch(table._id, { rematchCode: next });
+    return next;
+  },
+});
+
+/** Daily (crons.ts): deletes lobbies nobody started and tables every human walked away from. */
+export const cleanup = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const lobbies = await ctx.db
+      .query('tables')
+      .withIndex('by_status', (q) => q.eq('status', 'lobby').lte('createdAt', now - STALE_TABLE_MS))
+      .take(200);
+    const running = await ctx.db
+      .query('tables')
+      .withIndex('by_status', (q) => q.eq('status', 'playing').lte('createdAt', now - STALE_TABLE_MS))
+      .take(200);
+    for (const t of [...lobbies, ...running]) {
+      const row = t.status === 'playing' ? await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', t._id)).unique() : null;
+      if (isAbandoned({ status: t.status, seats: t.seats as Seat[], createdAt: t.createdAt, lastMoveAt: row?.lastMoveAt ?? null }, now)) {
+        await deleteTable(ctx, t._id);
+      }
+    }
+  },
+});
+
 // ---------- play ----------
 
 export const act = mutation({
@@ -447,6 +512,7 @@ export const watch = query({
       spectating,
       view,
       deadline,
+      rematchCode: table.rematchCode ?? null,
     };
   },
 });

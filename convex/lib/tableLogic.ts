@@ -6,7 +6,7 @@ import { createRng } from '../../src/core/rng';
 import { belaGame } from '../../src/games/bela/game';
 import type { BelaAction, BelaOptions, BelaState } from '../../src/games/bela/state';
 import { viewFor, type SeatView } from '../../src/games/bela/view';
-import { CODE_ALPHABET, CODE_LENGTH, NEXT_HAND_TIMEOUT_MS, TURN_TIMEOUT_MS } from './config';
+import { CODE_ALPHABET, CODE_LENGTH, NEXT_HAND_TIMEOUT_MS, STALE_TABLE_MS, TURN_TIMEOUT_MS } from './config';
 import { TableError } from './errors';
 
 export type ServerBotLevel = 'easy' | 'medium' | 'hard';
@@ -209,4 +209,29 @@ export function replay(options: BelaOptions, seed: number, actions: BelaAction[]
     s = belaGame.apply(s, a);
   }
   return s;
+}
+
+/**
+ * Seating for a rematch: same seats, bots stay, away players are seated in person again.
+ * `canSit(userId)` false (e.g. the player is at their table limit) leaves that seat empty.
+ */
+export function rematchSeats(seats: Seat[], canSit: (userId: Id<'users'>) => boolean = () => true): Seat[] {
+  return seats.map((s) => {
+    const userId = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
+    if (userId === undefined) return s;
+    return canSit(userId) ? { kind: 'user', userId, name: (s as { name: string }).name } : { kind: 'empty' };
+  });
+}
+
+/**
+ * Tables the daily cleanup deletes: lobbies nobody started, and running tables whose humans
+ * have all been away for STALE_TABLE_MS. Finished tables are game history and stay.
+ */
+export function isAbandoned(
+  t: { status: 'lobby' | 'playing' | 'finished'; seats: Seat[]; createdAt: number; lastMoveAt: number | null },
+  now: number,
+): boolean {
+  if (t.status === 'lobby') return now - t.createdAt >= STALE_TABLE_MS;
+  if (t.status !== 'playing' || humanCount(t.seats) > 0 || !hasStandIn(t.seats)) return false;
+  return now - (t.lastMoveAt ?? t.createdAt) >= STALE_TABLE_MS;
 }

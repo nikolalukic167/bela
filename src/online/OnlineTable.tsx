@@ -27,6 +27,7 @@ function OnlineTable({ code }: { code: string }) {
   const data = useQuery(api.tables.watch, { code });
   const act = useMutation(api.tables.act);
   const leave = useMutation(api.tables.leave);
+  const rematch = useMutation(api.tables.rematch);
   const [error, setError] = useState<string | null>(null);
   useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
 
@@ -76,7 +77,12 @@ function OnlineTable({ code }: { code: string }) {
           onAct={(a: BelaAction) => {
             if (a.type !== 'collect') void guard(() => act({ code, action: a })); // collecting is the server's job
           }}
-          onMatchEnd={() => navigate('/online')}
+          // "Play again" opens (or joins) the rematch at a new table with the same seating.
+          onMatchEnd={() =>
+            void guard(async () => {
+              navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
+            })
+          }
           gameActions={[
             { label: t('online.back'), onClick: () => navigate('/online') },
             ...(data.mySeat !== null && data.status !== 'finished' ? [{ label: t('online.leave'), onClick: () => void leaveGame() }] : []),
