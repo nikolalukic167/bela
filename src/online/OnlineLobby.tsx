@@ -79,7 +79,7 @@ function OnlineLobby() {
               <h2 className="card-title">{t('online.create')}</h2>
               <p className="opacity-70 text-sm">{t(rated && ratingsOn ? 'online.ratedHint' : 'online.startHint')}</p>
               {ratingsOn && (
-                <label className="label cursor-pointer gap-2">
+                <label className="label cursor-pointer gap-2 text-base-content">
                   <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
                   {t('online.rated')}
                 </label>

@@ -6,6 +6,7 @@ import { gainsByOpponent, quartetKey, settleMatch } from './lib/ratingLogic';
 import { flagOn } from './lib/flags';
 import { logEvent } from './lib/log';
 import type { Seat } from './lib/tableLogic';
+import type { HandLine } from '../src/games/bela/stats';
 import { DEFAULT_CONFIG, displayRating, isProvisional, newRating, type PlayerRating, type RatingBook } from '../src/ratings/ratings';
 
 const toRating = (r: Doc<'ratings'>): PlayerRating => ({ mu: r.mu, sigma: r.sigma, gamesPlayed: r.gamesPlayed, lastPlayedAt: r.lastPlayedAt });
@@ -22,6 +23,7 @@ export async function recordGame(
   ctx: MutationCtx,
   table: Doc<'tables'>,
   result: { scores: [number, number]; winner: 0 | 1; abandonedBy?: Id<'users'> },
+  hands: HandLine[] = [],
 ) {
   if (table.isTest) return;
   const now = Date.now();
@@ -34,6 +36,7 @@ export async function recordGame(
     endReason: result.abandonedBy ? ('abandoned' as const) : ('normal' as const),
     ...(result.abandonedBy && { abandonedBy: result.abandonedBy }),
     endedAt: now,
+    hands,
   };
   const ids = players.filter((p): p is Id<'users'> => p !== null);
   // With the ratings flag off (a kill switch, architecture §12) even a rated table's result changes no rating.

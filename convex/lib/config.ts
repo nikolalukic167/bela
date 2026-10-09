@@ -67,6 +67,15 @@ export const QUOTA_WARN_AT = 0.7;
 export const CALLS_PER_ACTION = 5;
 /** Finished unrated tables lose their move log after this; the games row stays (architecture §12). */
 export const ACTION_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Chat (architecture §8): entries disappear after this; a purge deletes them. */
+export const CHAT_TTL_MS = 10 * 60 * 1000;
+/** At most this many messages per player per table within the window. */
+export const CHAT_BURST = 5;
+export const CHAT_WINDOW_MS = 10_000;
+/** Lobby free text, in characters. */
+export const CHAT_TEXT_MAX = 120;
+/** Messages a table's chat query returns, newest last. */
+export const CHAT_LIST_SIZE = 30;
 /** Name changes allowed per window (architecture §9.4). */
 export const RENAME_LIMIT = 3;
 export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;

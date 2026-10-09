@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAccount } from '../account/account';
 import { SignInDialog } from '../account/SignInDialog';
@@ -30,17 +30,57 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
   const [signingIn, setSigningIn] = useState(false);
   const online = useAccount().status !== 'unavailable';
   const close = () => setOpen(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLUListElement>(null);
+  // Keyboard users: opening moves focus into the menu, Escape closes it and returns focus.
+  useEffect(() => {
+    if (!open) return;
+    // The drawer becomes visible through a CSS transition; focus once it can take focus.
+    let tries = 0;
+    let frame = 0;
+    const focusFirst = () => {
+      const first = menu.current?.querySelector<HTMLElement>('a, button');
+      first?.focus();
+      if (document.activeElement !== first && ++tries < 30) frame = requestAnimationFrame(focusFirst);
+    };
+    frame = requestAnimationFrame(focusFirst);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      menuButton.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   return (
     <div className="drawer">
-      <input id="app-drawer" type="checkbox" className="drawer-toggle" checked={open} onChange={(e) => setOpen(e.target.checked)} />
+      <input
+        id="app-drawer"
+        type="checkbox"
+        className="drawer-toggle"
+        checked={open}
+        onChange={(e) => setOpen(e.target.checked)}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
       <div className={`drawer-content flex flex-col ${fixed ? 'h-dvh overflow-hidden' : 'min-h-dvh'}`}>
         <header className="navbar bg-base-300/80 min-h-12 gap-2 px-2 shrink-0">
-          <label htmlFor="app-drawer" className="btn btn-square btn-ghost" aria-label={t('menu.open')}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block size-6 stroke-current">
+          <button
+            ref={menuButton}
+            type="button"
+            className="btn btn-square btn-ghost"
+            aria-label={t('menu.open')}
+            aria-expanded={open}
+            onClick={() => setOpen(true)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block size-6 stroke-current" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
-          </label>
+          </button>
           {center ?? (
             <Link to="/" className="text-xl font-bold">
               <span className="text-primary">♣♥</span> Karte
@@ -52,7 +92,7 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
 
       <nav className="drawer-side z-50" aria-label={t('menu.title')}>
         <label htmlFor="app-drawer" aria-label={t('menu.close')} className="drawer-overlay" />
-        <ul className="menu bg-base-200 text-base-content min-h-full w-72 p-4 gap-1">
+        <ul ref={menu} className="menu bg-base-200 text-base-content min-h-full w-72 p-4 gap-1">
           <li className="mb-2">
             <Link to="/" onClick={close} className="text-xl font-bold">
               <span className="text-primary">♣♥</span> Karte
@@ -134,6 +174,11 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
               <li>
                 <NavLink to="/history" onClick={close}>
                   {t('menu.history')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/stats" onClick={close}>
+                  {t('menu.stats')}
                 </NavLink>
               </li>
               <li>
