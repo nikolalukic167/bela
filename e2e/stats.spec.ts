@@ -24,7 +24,7 @@ test('personal stats: local games against bots in their own section, online stat
 
   const online = page.getByRole('region', { name: 'Online partije' });
   await expect(online).toContainText('Još nema završenih partija.');
-  await expect(online).toContainText('Još nisi igrao online s partnerom');
+  await expect(online).toContainText('Još nema online partija s partnerom');
 
   const { violations } = await new AxeBuilder({ page }).options({ preload: false }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(violations.map((v) => v.id)).toEqual([]);
