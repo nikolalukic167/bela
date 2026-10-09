@@ -9,6 +9,15 @@ export const FAST_BATCH = 150;
 export const RECONNECT_GRACE_MS = 90_000;
 /** Open table pages report in this often; a few missed beats fit inside the grace period. */
 export const HEARTBEAT_MS = 20_000;
+/** A seated human who doesn't move in time gets a move played for them (architecture §7). */
+export const TURN_TIMEOUT_MS = 45_000;
+/** Nobody pressed "next" on the hand summary: the server deals on. */
+export const NEXT_HAND_TIMEOUT_MS = 30_000;
+/** Lobbies never started, and tables everyone walked away from, are deleted after this. */
+export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
+/** Rated games a player needs before appearing on the public leaderboard (architecture §9.1). */
+export const LEADERBOARD_MIN_GAMES = 10;
+export const LEADERBOARD_SIZE = 50;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
 export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;

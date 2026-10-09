@@ -29,6 +29,7 @@ function OnlineLobby() {
   const create = useMutation(api.tables.create);
   const join = useMutation(api.tables.join);
   const [creating, setCreating] = useState(false);
+  const [rated, setRated] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +40,7 @@ function OnlineLobby() {
     setError(null);
     try {
       const botLevel = o.botLevel === 'expert' ? 'hard' : o.botLevel;
-      const created = await create({ options: { ...o, botLevel } });
+      const created = await create({ options: { ...o, botLevel }, rated });
       navigate(`/t/${created}`);
     } catch (e) {
       fail(e);
@@ -69,7 +70,11 @@ function OnlineLobby() {
           <section className="card bg-base-200 shadow-md">
             <div className="card-body">
               <h2 className="card-title">{t('online.create')}</h2>
-              <p className="opacity-70 text-sm">{t('online.startHint')}</p>
+              <p className="opacity-70 text-sm">{t(rated ? 'online.ratedHint' : 'online.startHint')}</p>
+              <label className="label cursor-pointer gap-2">
+                <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
+                {t('online.rated')}
+              </label>
               <div className="card-actions">
                 <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
                   {t('online.create')}

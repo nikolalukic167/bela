@@ -132,7 +132,7 @@ describe('playing', () => {
     const { t, host, friend, c } = await startedTable();
     const hostW = await host.as.query(api.tables.watch, { code: c });
     const friendW = await friend.as.query(api.tables.watch, { code: c });
-    expect(Object.keys(hostW!).sort()).toEqual(['code', 'isHost', 'isTest', 'mySeat', 'options', 'result', 'seats', 'spectating', 'status', 'view']);
+    expect(Object.keys(hostW!).sort()).toEqual(['code', 'deadline', 'isHost', 'isTest', 'mySeat', 'options', 'rated', 'rematchCode', 'result', 'seats', 'spectating', 'status', 'view']);
     const seed = await t.run(async (ctx) => (await ctx.db.query('tableStates').first())!.state.seed as number);
     for (const json of [JSON.stringify(hostW), JSON.stringify(friendW)]) expect(json).not.toContain(`"seed":${seed}`);
     const hostCards = new Set(hostW!.view!.hand.map((x) => `${x.rank}${x.suit}`));

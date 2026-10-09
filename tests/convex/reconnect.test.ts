@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../convex/_generated/api';
-import { HEARTBEAT_MS, RECONNECT_GRACE_MS } from '../../convex/lib/config';
+import { HEARTBEAT_MS, RECONNECT_GRACE_MS, TURN_TIMEOUT_MS } from '../../convex/lib/config';
 import { elapse, newBackend, OPTIONS, signUp, type Backend } from './setup';
 
 beforeEach(() => vi.useFakeTimers());
@@ -76,8 +76,9 @@ describe('reconnect', () => {
     expect(await version(t)).toBe(paused);
 
     await friend.as.mutation(api.tables.heartbeat, { code: c });
-    await passTime(t, c, 10_000, [friend]);
-    expect(await version(t)).toBeGreaterThan(paused); // host's stand-in plays again
+    // Play resumes: the host's stand-in moves, or the friend's own turn timer runs out.
+    await passTime(t, c, TURN_TIMEOUT_MS + 10_000, [friend]);
+    expect(await version(t)).toBeGreaterThan(paused);
     expect((await seatsOf(host, c))[0].away).toBe(true);
   });
 

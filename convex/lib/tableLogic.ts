@@ -6,7 +6,7 @@ import { createRng } from '../../src/core/rng';
 import { belaGame } from '../../src/games/bela/game';
 import type { BelaAction, BelaOptions, BelaState } from '../../src/games/bela/state';
 import { viewFor, type SeatView } from '../../src/games/bela/view';
-import { CODE_ALPHABET, CODE_LENGTH } from './config';
+import { CODE_ALPHABET, CODE_LENGTH, NEXT_HAND_TIMEOUT_MS, STALE_TABLE_MS, TURN_TIMEOUT_MS } from './config';
 import { TableError } from './errors';
 
 export type ServerBotLevel = 'easy' | 'medium' | 'hard';
@@ -111,6 +111,25 @@ export function moverOf(state: BelaState, seats: Seat[]): Mover {
   return seats[turn]?.kind === 'bot' ? { kind: 'bot', seat: turn } : { kind: 'none' };
 }
 
+/**
+ * The turn timer while the table waits on its humans: the seat to move (null: anyone may
+ * press "next") and how long they have. Null when the server moves by itself or the match is over.
+ */
+export function timeoutFor(state: BelaState, seats: Seat[]): { seat: number | null; ms: number } | null {
+  if (moverOf(state, seats).kind !== 'none' || belaGame.isOver(state)) return null;
+  if (state.phase === 'handOver') return humanCount(seats) > 0 ? { seat: null, ms: NEXT_HAND_TIMEOUT_MS } : null;
+  const turn = belaGame.currentPlayer(state);
+  return turn !== null && seats[turn]?.kind === 'user' ? { seat: turn, ms: TURN_TIMEOUT_MS } : null;
+}
+
+/** What the server plays when the timer runs out: the next deal, or a medium bot's move for the seat. */
+export function timeoutMove(state: BelaState, seats: Seat[], version: number): Move | null {
+  const t = timeoutFor(state, seats);
+  if (!t) return null;
+  if (t.seat === null) return { seat: belaGame.currentPlayer(state) ?? 0, action: { type: 'next' } };
+  return { seat: t.seat, action: botAction(state, t.seat, 'medium', state.seed ^ Math.imul(version + 1, 2654435761)) };
+}
+
 function sameAction(a: BelaAction, b: BelaAction): boolean {
   if (a.type !== b.type) return false;
   if (a.type === 'call' && b.type === 'call') return a.suit === b.suit;
@@ -171,4 +190,48 @@ export function advance(state: BelaState, seats: Seat[], version: number, max: n
 
 export function isFinished(state: BelaState): boolean {
   return belaGame.isOver(state);
+}
+
+/**
+ * Rebuilds a game from its seed, options and action log (architecture §5), checking every
+ * move is legal where it was made. Used to verify stored games and for replays.
+ */
+export function replay(options: BelaOptions, seed: number, actions: BelaAction[]): BelaState {
+  let s = startState(options, seed);
+  for (const a of actions) {
+    const auto = belaGame.autoAction(s);
+    const seat = belaGame.currentPlayer(s);
+    const legal =
+      (auto !== null && sameAction(auto, a)) ||
+      (s.phase === 'handOver' && a.type === 'next') ||
+      (seat !== null && belaGame.legalActions(s, seat).some((l) => sameAction(l, a)));
+    if (!legal || belaGame.isOver(s)) throw new TableError('ILLEGAL_ACTION');
+    s = belaGame.apply(s, a);
+  }
+  return s;
+}
+
+/**
+ * Seating for a rematch: same seats, bots stay, away players are seated in person again.
+ * `canSit(userId)` false (e.g. the player is at their table limit) leaves that seat empty.
+ */
+export function rematchSeats(seats: Seat[], canSit: (userId: Id<'users'>) => boolean = () => true): Seat[] {
+  return seats.map((s) => {
+    const userId = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
+    if (userId === undefined) return s;
+    return canSit(userId) ? { kind: 'user', userId, name: (s as { name: string }).name } : { kind: 'empty' };
+  });
+}
+
+/**
+ * Tables the daily cleanup deletes: lobbies nobody started, and running tables whose humans
+ * have all been away for STALE_TABLE_MS. Finished tables are game history and stay.
+ */
+export function isAbandoned(
+  t: { status: 'lobby' | 'playing' | 'finished'; seats: Seat[]; createdAt: number; lastMoveAt: number | null },
+  now: number,
+): boolean {
+  if (t.status === 'lobby') return now - t.createdAt >= STALE_TABLE_MS;
+  if (t.status !== 'playing' || humanCount(t.seats) > 0 || !hasStandIn(t.seats)) return false;
+  return now - (t.lastMoveAt ?? t.createdAt) >= STALE_TABLE_MS;
 }

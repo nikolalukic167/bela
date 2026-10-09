@@ -27,6 +27,7 @@ function OnlineTable({ code }: { code: string }) {
   const data = useQuery(api.tables.watch, { code });
   const act = useMutation(api.tables.act);
   const leave = useMutation(api.tables.leave);
+  const rematch = useMutation(api.tables.rematch);
   const [error, setError] = useState<string | null>(null);
   useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
 
@@ -76,12 +77,18 @@ function OnlineTable({ code }: { code: string }) {
           onAct={(a: BelaAction) => {
             if (a.type !== 'collect') void guard(() => act({ code, action: a })); // collecting is the server's job
           }}
-          onMatchEnd={() => navigate('/online')}
+          // "Play again" opens (or joins) the rematch at a new table with the same seating.
+          onMatchEnd={() =>
+            void guard(async () => {
+              navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
+            })
+          }
           gameActions={[
             { label: t('online.back'), onClick: () => navigate('/online') },
             ...(data.mySeat !== null && data.status !== 'finished' ? [{ label: t('online.leave'), onClick: () => void leaveGame() }] : []),
           ]}
         />
+        {data.deadline !== null && (data.view.isMyTurn || data.view.phase === 'handOver') && <TurnCountdown deadline={data.deadline} />}
         {data.spectating && <div className="toast toast-top toast-center"><div className="alert alert-info">{t('online.spectating')}</div></div>}
         {error && <div className="toast toast-top toast-center"><div role="alert" className="alert alert-error">{error}</div></div>}
       </>
@@ -110,6 +117,27 @@ function useHeartbeat(code: string, active: boolean) {
     };
   }, [code, active, heartbeat]);
 }
+
+/** Shown for the last seconds of this player's turn timer; at zero the server moves for them. */
+function TurnCountdown({ deadline }: { deadline: number }) {
+  const { t } = useI18n();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const left = Math.max(0, Math.ceil((deadline - now) / 1000));
+  if (left > COUNTDOWN_FROM_S) return null;
+  return (
+    <div className="pointer-events-none fixed top-16 left-1/2 z-30 -translate-x-1/2" role="timer" aria-live="polite">
+      <span className={`badge badge-lg ${left <= 5 ? 'badge-error' : 'badge-warning'}`}>
+        {t('online.timeLeft')}: {left} s
+      </span>
+    </div>
+  );
+}
+
+const COUNTDOWN_FROM_S = 20;
 
 function TableLobby({ data, code, error, guard }: { data: Watched; code: string; error: string | null; guard: (fn: () => Promise<unknown>) => Promise<void> }) {
   const { t } = useI18n();
@@ -164,6 +192,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             <div className="flex items-center gap-2">
               <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
               {data.isTest && <span className="badge badge-warning">test</span>}
+              {data.rated && <span className="badge badge-primary">{t('online.rated')}</span>}
             </div>
             {lobby && (
               <>
@@ -231,7 +260,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
           )}
           {lobby && data.isHost && (
             <>
-              <button type="button" className="btn" disabled={!hasEmpty} onClick={() => void guard(() => addBot({ code }))}>
+              <button type="button" className="btn" disabled={!hasEmpty || data.rated} onClick={() => void guard(() => addBot({ code }))}>
                 {t('online.addBot')}
               </button>
               <button type="button" className="btn btn-primary h-[52px] w-full rounded-2xl text-[17px] order-first" onClick={() => void guard(() => start({ code }))}>
@@ -257,7 +286,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             {t('online.back')}
           </Link>
         </div>
-        {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t('online.startHint')}</p>}
+        {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t(data.rated ? 'online.ratedHint' : 'online.startHint')}</p>}
         {!lobby && !seated && <p className="text-sm opacity-70 mt-3">{t('online.watching')}</p>}
       </main>
     </AppShell>

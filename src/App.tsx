@@ -5,6 +5,7 @@ import { AdminPage } from './admin/AdminPage';
 import { OnlineLobbyPage } from './online/OnlineLobby';
 import { OnlineTablePage } from './online/OnlineTable';
 import { History } from './pages/History';
+import { Leaderboard } from './pages/Leaderboard';
 import { Home } from './pages/Home';
 import { Play } from './pages/Play';
 import { Rules } from './pages/Rules';
@@ -23,6 +24,7 @@ export function App() {
               <Route path="/online" element={<OnlineLobbyPage />} />
               <Route path="/t/:code" element={<OnlineTablePage />} />
               <Route path="/history" element={<History />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Home />} />
             </Routes>

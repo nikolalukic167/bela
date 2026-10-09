@@ -11,6 +11,7 @@ import {
   MAX_ACTIVE_TABLES_PER_USER,
   NEXT_HAND_DELAY_MS,
   RECONNECT_GRACE_MS,
+  STALE_TABLE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
 import {
@@ -21,20 +22,27 @@ import {
   fillWithBots,
   firstEmpty,
   humanCount,
+  isAbandoned,
   isFinished,
   makeCode,
   moverOf,
   ownSeat,
   presenceCheck,
   reclaimSeat,
+  rematchSeats,
   seatOf,
   standIn,
   startState,
+  timeoutFor,
+  timeoutMove,
   type Seat,
   type ServerBotLevel,
 } from './lib/tableLogic';
 import type { BelaAction, BelaState } from '../src/games/bela/state';
 import { viewFor } from '../src/games/bela/view';
+import { recordGame } from './ratings';
+import { ratedBlocker } from './lib/ratingLogic';
+import { belaGame } from '../src/games/bela/game';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -85,7 +93,13 @@ const botLevelOf = (t: Doc<'tables'>): ServerBotLevel => (t.options.botLevel ?? 
 /** Schedules the server's next step (bot move, trick collection) if there is one. */
 export async function scheduleNext(ctx: MutationCtx, table: Doc<'tables'>, row: Doc<'tableStates'>) {
   const m = moverOf(row.state as BelaState, table.seats as Seat[]);
-  if (m.kind === 'none') return;
+  if (m.kind === 'none') {
+    // Waiting on the humans: start the turn timer (a later move makes it a no-op).
+    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[]);
+    await ctx.db.patch(row._id, { deadline: timer ? Date.now() + timer.ms : undefined });
+    if (timer) await ctx.scheduler.runAfter(timer.ms, internal.tables.timeout, { tableId: table._id, version: row.version });
+    return;
+  }
   const delay =
     table.speed === 'fast'
       ? 0
@@ -109,10 +123,12 @@ export async function commit(
   for (const [i, m] of moves.entries()) {
     await ctx.db.insert('actions', { tableId: table._id, seq: row.version + i, seat: m.seat, action: m.action });
   }
-  await ctx.db.patch(row._id, { state, version });
+  await ctx.db.patch(row._id, { state, version, lastMoveAt: Date.now() });
   const next = { ...row, state, version };
   if (isFinished(state)) {
-    await ctx.db.patch(table._id, { status: 'finished', result: { scores: [...state.scores], winner: state.winner ?? 0 }, finishedAt: Date.now() });
+    const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (state.winner === 1 ? 1 : 0) as 0 | 1 };
+    await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
+    await recordGame(ctx, table, result);
     return;
   }
   await scheduleNext(ctx, table, next);
@@ -131,8 +147,8 @@ async function activeTableCount(ctx: QueryCtx, userId: Id<'users'>): Promise<num
 // ---------- lobby ----------
 
 export const create = mutation({
-  args: { options: optionsValidator },
-  handler: async (ctx, { options }) => {
+  args: { options: optionsValidator, rated: v.optional(v.boolean()) },
+  handler: async (ctx, { options, rated }) => {
     const user = await requireUser(ctx);
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
     const seats = emptySeats();
@@ -142,6 +158,7 @@ export const create = mutation({
       code,
       hostId: user._id,
       options: { ...options, botLevel: options.botLevel ?? 'medium' },
+      rated: rated === true,
       status: 'lobby',
       seats,
       isTest: false,
@@ -188,6 +205,7 @@ export const addBot = mutation({
     const seats = table.seats as Seat[];
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
+    if (table.rated) throw new TableError('RATED_NEEDS_FOUR'); // bots never play rated games
     seats[free] = botSeat(seats, botLevelOf(table));
     await ctx.db.patch(table._id, { seats });
   },
@@ -240,6 +258,10 @@ export const leave = mutation({
     await dropMembership(ctx, user._id, table._id);
     await dropPresence(ctx, table._id, user._id);
     if (table.status === 'finished') return;
+    if (table.status === 'playing' && table.rated) {
+      await abandon(ctx, table, user._id);
+      return;
+    }
     // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
     seats[seat] =
       table.status === 'lobby'
@@ -263,6 +285,12 @@ export const start = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const { table } = await hostTable(ctx, code);
+    if (table.rated) {
+      const users = new Map<string, Doc<'users'> | null>();
+      for (const s of table.seats as Seat[]) if (s.kind === 'user') users.set(s.userId, await ctx.db.get(s.userId));
+      const blocker = ratedBlocker(table.seats as Seat[], (id) => users.get(id) ?? null);
+      if (blocker) throw new TableError(blocker);
+    }
     const seats = fillWithBots(table.seats as Seat[], botLevelOf(table));
     const seedBuf = new Uint32Array(1);
     crypto.getRandomValues(seedBuf); // the seed is server-only until the game ends (architecture §9.1)
@@ -340,9 +368,88 @@ export const checkPresence = internalMutation({
       return;
     }
     await ctx.db.delete(row._id);
+    if (table.rated) {
+      await abandon(ctx, table, row.userId);
+      return;
+    }
     const seats = standIn(table.seats as Seat[], seat, botLevelOf(table));
     await ctx.db.patch(table._id, { seats });
     await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, await loadState(ctx, table._id));
+  },
+});
+
+/**
+ * A player left a rated game (or dropped past the grace period): the match ends as abandoned
+ * and their team loses (architecture §7). Friendly games get a stand-in bot instead.
+ */
+async function abandon(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users'>) {
+  const state = (await loadState(ctx, table._id)).state as BelaState;
+  const seat = ownSeat(table.seats as Seat[], userId);
+  const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (seat % 2 === 0 ? 1 : 0) as 0 | 1 };
+  await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
+  await recordGame(ctx, table, { ...result, abandonedBy: userId });
+}
+
+/**
+ * After a match, any of its players opens the rematch: a lobby with the same seating and
+ * options, hosted by them. Everyone else asking gets the same table.
+ */
+export const rematch = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const user = await requireUser(ctx);
+    const table = await tableByCode(ctx, code);
+    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    if (ownSeat(table.seats as Seat[], user._id) < 0) throw new TableError('FORBIDDEN');
+    if (table.status !== 'finished') throw new TableError('WRONG_STATE');
+    if (table.rematchCode) {
+      const existing = await tableByCode(ctx, table.rematchCode);
+      if (existing) return existing.code;
+    }
+    if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
+    const free = new Set<Id<'users'>>([user._id]);
+    for (const s of table.seats as Seat[]) {
+      const id = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
+      if (id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER) free.add(id);
+    }
+    const seats = rematchSeats(table.seats as Seat[], (id) => free.has(id));
+    const next = await uniqueCode(ctx);
+    const tableId = await ctx.db.insert('tables', {
+      code: next,
+      hostId: user._id,
+      options: table.options,
+      status: 'lobby',
+      seats,
+      isTest: table.isTest,
+      speed: table.speed,
+      rated: table.rated,
+      createdAt: Date.now(),
+    });
+    for (const s of seats) if (s.kind === 'user') await ctx.db.insert('memberships', { userId: s.userId, tableId });
+    await ctx.db.patch(table._id, { rematchCode: next });
+    return next;
+  },
+});
+
+/** Daily (crons.ts): deletes lobbies nobody started and tables every human walked away from. */
+export const cleanup = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const lobbies = await ctx.db
+      .query('tables')
+      .withIndex('by_status', (q) => q.eq('status', 'lobby').lte('createdAt', now - STALE_TABLE_MS))
+      .take(200);
+    const running = await ctx.db
+      .query('tables')
+      .withIndex('by_status', (q) => q.eq('status', 'playing').lte('createdAt', now - STALE_TABLE_MS))
+      .take(200);
+    for (const t of [...lobbies, ...running]) {
+      const row = t.status === 'playing' ? await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', t._id)).unique() : null;
+      if (isAbandoned({ status: t.status, seats: t.seats as Seat[], createdAt: t.createdAt, lastMoveAt: row?.lastMoveAt ?? null }, now)) {
+        await deleteTable(ctx, t._id);
+      }
+    }
   },
 });
 
@@ -377,6 +484,19 @@ export const step = internalMutation({
   },
 });
 
+/** Scheduled turn timer: the humans didn't move in time, so the server moves for them. */
+export const timeout = internalMutation({
+  args: { tableId: v.id('tables'), version: v.number() },
+  handler: async (ctx, { tableId, version }) => {
+    const table = await ctx.db.get(tableId);
+    if (!table || table.status !== 'playing') return;
+    const row = await loadState(ctx, tableId);
+    if (row.version !== version) return;
+    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version);
+    if (move) await commit(ctx, table, row, belaGame.apply(row.state as BelaState, move.action), [move]);
+  },
+});
+
 // ---------- reads ----------
 
 function publicSeats(seats: Seat[], me: Id<'users'>) {
@@ -405,8 +525,10 @@ export const watch = query({
     const mySeat = ownSeat(seats, user._id);
     let view = null;
     let spectating = false;
+    let deadline: number | null = null;
     if (table.status !== 'lobby') {
       const row = await loadState(ctx, table._id);
+      deadline = table.status === 'playing' ? (row.deadline ?? null) : null;
       // Admins may watch bot-only test tables (never real ones) from seat 0.
       spectating = mySeat < 0 && table.isTest && user.isAdmin === true;
       if (mySeat >= 0 || spectating) view = viewFor(row.state as BelaState, Math.max(mySeat, 0));
@@ -422,6 +544,9 @@ export const watch = query({
       isTest: table.isTest,
       spectating,
       view,
+      deadline,
+      rematchCode: table.rematchCode ?? null,
+      rated: table.rated === true,
     };
   },
 });

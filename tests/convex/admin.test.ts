@@ -1,6 +1,7 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, internal } from '../../convex/_generated/api';
+import { replay } from '../../convex/lib/tableLogic';
 import { newBackend, OPTIONS, signUp } from './setup';
 
 beforeEach(() => vi.useFakeTimers());
@@ -63,6 +64,20 @@ describe('bot matches and test data', () => {
     const log = await t.run((ctx) => ctx.db.query('actions').collect());
     expect(log.length).toBeGreaterThan(100);
     expect(log.map((a) => a.seq)).toEqual(log.map((_, i) => i));
+  });
+
+  it('the stored action log rebuilds the stored game exactly (replay in CI, architecture §11)', async () => {
+    const t = newBackend();
+    const admin = await signUp(t, 'Boss', { isAdmin: true });
+    await admin.as.mutation(api.admin.startBotMatch, { level: 'medium', speed: 'fast', target: 501 });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const { table, row, log } = await t.run(async (ctx) => ({
+      table: (await ctx.db.query('tables').first())!,
+      row: (await ctx.db.query('tableStates').first())!,
+      log: await ctx.db.query('actions').collect(),
+    }));
+    const sorted = log.sort((x, y) => x.seq - y.seq).map((a) => a.action);
+    expect(replay(table.options, row.state.seed, sorted)).toEqual(row.state);
   });
 
   it('a live bot match keeps going one move per tick', async () => {

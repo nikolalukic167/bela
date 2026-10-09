@@ -1,5 +1,3 @@
-import { loadJson, saveJson } from '../../ui/storage';
-
 /** One finished match, as shown in the player's history. Scores are [our team, their team]. */
 export interface HistoryEntry {
   id: string;
@@ -44,13 +42,4 @@ export function recordLocal(m: FinishedLocalMatch, now: number): HistoryEntry {
     won: m.winner === 0,
     players: [],
   };
-}
-
-const KEY = 'bela:history';
-const MAX_LOCAL = 200;
-
-export const loadLocalHistory = (): HistoryEntry[] => loadJson<HistoryEntry[]>(KEY) ?? [];
-
-export function saveLocalGame(e: HistoryEntry): void {
-  saveJson(KEY, mergeHistory([e], loadLocalHistory()).slice(0, MAX_LOCAL));
 }
