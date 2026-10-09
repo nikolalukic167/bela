@@ -24,3 +24,6 @@ export const MIN_NAME_LENGTH = 2;
 /** Unambiguous characters only (no 0/O, 1/I/L). */
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 6;
+/** Name changes allowed per window (architecture §9.4). */
+export const RENAME_LIMIT = 3;
+export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;

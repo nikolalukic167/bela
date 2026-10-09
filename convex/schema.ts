@@ -43,6 +43,8 @@ export default defineSchema({
     isBot: v.optional(v.boolean()),
     /** Created by the admin panel's seed; hidden from real users and removable in one click. */
     isTest: v.optional(v.boolean()),
+    /** Times of recent renames, for the rename rate limit (architecture §9.4). */
+    renameTimes: v.optional(v.array(v.number())),
   })
     .index('email', ['email'])
     .index('phone', ['phone'])

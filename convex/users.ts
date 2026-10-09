@@ -1,8 +1,9 @@
 import { getAuthUserId } from '@convex-dev/auth/server';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { cleanName, requireUser } from './lib/auth';
-import { MAX_NAME_LENGTH, MIN_NAME_LENGTH } from './lib/config';
+import { requireUser } from './lib/auth';
+import { TableError } from './lib/errors';
+import { acceptName, renameCheck } from './lib/names';
 
 /** The signed-in user's public profile, or null when signed out. */
 export const me = query({
@@ -22,10 +23,17 @@ export const me = query({
   },
 });
 
+/**
+ * Changes the display name. Names are filtered (offensive names are refused) and rate-limited;
+ * they are not unique (open decision, architecture §14.1). Seats at existing tables keep the old name.
+ */
 export const rename = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
     const user = await requireUser(ctx);
-    await ctx.db.patch(user._id, { name: cleanName(name, MIN_NAME_LENGTH, MAX_NAME_LENGTH) });
+    const accepted = acceptName(name); // a refused name doesn't count against the limit
+    const check = renameCheck(user.renameTimes ?? [], Date.now());
+    if (!check.ok) throw new TableError('RENAME_TOO_SOON');
+    await ctx.db.patch(user._id, { name: accepted, renameTimes: check.times });
   },
 });

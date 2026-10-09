@@ -247,6 +247,11 @@ function AccountMenu({ onDone, onSignIn }: { onDone: () => void; onSignIn: () =>
               {account.profile?.isGuest && <span className="badge badge-sm badge-ghost">{t('auth.guestBadge')}</span>}
             </span>
           </li>
+          <li>
+            <NavLink to="/account" onClick={onDone}>
+              {t('menu.myAccount')}
+            </NavLink>
+          </li>
           {account.profile?.isAdmin && (
             <li>
               <NavLink to="/admin" onClick={onDone}>

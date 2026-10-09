@@ -1,5 +1,6 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AccountProvider } from './account/account';
+import { AccountPage } from './account/AccountPage';
 import { I18nProvider } from './i18n/i18n';
 import { AdminPage } from './admin/AdminPage';
 import { OnlineLobbyPage } from './online/OnlineLobby';
@@ -26,6 +27,7 @@ export function App() {
               <Route path="/history" element={<History />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/account" element={<AccountPage />} />
               <Route path="*" element={<Home />} />
             </Routes>
           </HashRouter>

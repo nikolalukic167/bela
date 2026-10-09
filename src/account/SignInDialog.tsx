@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
+import { errorKey } from '../online/errors';
 import { Modal } from '../ui/Modal';
 import { useAccount } from './account';
 import { GoogleIcon } from './GoogleIcon';
@@ -28,8 +29,9 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
     try {
       await fn();
       onClose();
-    } catch {
-      setError(fail);
+    } catch (e) {
+      // The name filter has its own message; everything else keeps the form's generic one.
+      setError(errorKey(e) === 'err.NAME_NOT_ALLOWED' ? 'err.NAME_NOT_ALLOWED' : fail);
     } finally {
       setBusy(false);
     }

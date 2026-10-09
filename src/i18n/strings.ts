@@ -215,6 +215,15 @@ const hr = {
   'rating.provisional': 'privremeno',
   'rating.games': 'rangiranih partija',
   'err.generic': 'Nešto je pošlo po zlu. Pokušaj ponovno.',
+  'err.NAME_NOT_ALLOWED': 'To ime nije dopušteno. Odaberi drugo.',
+  'err.RENAME_TOO_SOON': 'Ime možeš promijeniti najviše 3 puta dnevno. Pokušaj sutra.',
+  'err.BLOCKED': 'Ne možeš sjesti za ovaj stol.',
+  'menu.myAccount': 'Moj račun',
+  'account.title': 'Moj račun',
+  'account.nameTitle': 'Ime za stolom',
+  'account.nameHint': 'Ovo ime vide ostali igrači. Imena nisu jedinstvena. Promjena vrijedi za nove stolove.',
+  'account.save': 'Spremi',
+  'account.saved': 'Spremljeno.',
 };
 
 const en: Record<keyof typeof hr, string> = {
@@ -432,6 +441,15 @@ const en: Record<keyof typeof hr, string> = {
   'rating.provisional': 'provisional',
   'rating.games': 'rated matches',
   'err.generic': 'Something went wrong. Please try again.',
+  'err.NAME_NOT_ALLOWED': 'That name is not allowed. Please pick another.',
+  'err.RENAME_TOO_SOON': 'You can change your name at most 3 times a day. Try again tomorrow.',
+  'err.BLOCKED': "You can't sit at this table.",
+  'menu.myAccount': 'My account',
+  'account.title': 'My account',
+  'account.nameTitle': 'Name at the table',
+  'account.nameHint': 'Other players see this name. Names are not unique. A change applies to new tables.',
+  'account.save': 'Save',
+  'account.saved': 'Saved.',
 };
 
 export type StringKey = keyof typeof hr;

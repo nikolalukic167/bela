@@ -21,13 +21,3 @@ export async function requireAdmin(ctx: Ctx): Promise<Doc<'users'>> {
   if (!user?.isAdmin) throw new TableError('NOT_FOUND');
   return user;
 }
-
-/** 2–24 chars, no control characters. Used for every user-chosen name. */
-export function cleanName(raw: unknown, min: number, max: number): string {
-  const name = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
-  // eslint-disable-next-line no-control-regex
-  if (name.length < min || name.length > max || /[\u0000-\u001f\u007f]/.test(name)) {
-    throw new TableError('INVALID_INPUT');
-  }
-  return name;
-}
