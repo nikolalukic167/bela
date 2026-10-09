@@ -4,6 +4,7 @@ import { requireUser } from './lib/auth';
 import { LEADERBOARD_MIN_GAMES, LEADERBOARD_SIZE } from './lib/config';
 import { quartetKey, settleMatch } from './lib/ratingLogic';
 import type { Seat } from './lib/tableLogic';
+import type { HandLine } from '../src/games/bela/stats';
 import { DEFAULT_CONFIG, displayRating, isProvisional, newRating, type PlayerRating, type RatingBook } from '../src/ratings/ratings';
 
 const toRating = (r: Doc<'ratings'>): PlayerRating => ({ mu: r.mu, sigma: r.sigma, gamesPlayed: r.gamesPlayed, lastPlayedAt: r.lastPlayedAt });
@@ -20,6 +21,7 @@ export async function recordGame(
   ctx: MutationCtx,
   table: Doc<'tables'>,
   result: { scores: [number, number]; winner: 0 | 1; abandonedBy?: Id<'users'> },
+  hands: HandLine[] = [],
 ) {
   if (table.isTest) return;
   const now = Date.now();
@@ -32,6 +34,7 @@ export async function recordGame(
     endReason: result.abandonedBy ? ('abandoned' as const) : ('normal' as const),
     ...(result.abandonedBy && { abandonedBy: result.abandonedBy }),
     endedAt: now,
+    hands,
   };
   const ids = players.filter((p): p is Id<'users'> => p !== null);
   if (!table.rated || ids.length !== 4) {

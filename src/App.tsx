@@ -10,6 +10,7 @@ import { Leaderboard } from './pages/Leaderboard';
 import { Home } from './pages/Home';
 import { Play } from './pages/Play';
 import { Rules } from './pages/Rules';
+import { Stats } from './pages/Stats';
 import { SettingsProvider } from './ui/settings';
 
 export function App() {
@@ -26,6 +27,7 @@ export function App() {
               <Route path="/online" element={<OnlineLobbyPage />} />
               <Route path="/t/:code" element={<OnlineTablePage />} />
               <Route path="/history" element={<History />} />
+              <Route path="/stats" element={<Stats />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Home />} />

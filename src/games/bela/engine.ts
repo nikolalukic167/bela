@@ -232,7 +232,7 @@ function finishHand(s: BelaState): BelaState {
     scores: match.scores,
     hanging: match.hanging,
     winner: match.winner,
-    history: [...s.history, result],
+    history: [...s.history, { ...result, callerSeat: s.callerSeat as number }],
     phase: match.winner === null ? 'handOver' : 'matchOver',
   };
 }

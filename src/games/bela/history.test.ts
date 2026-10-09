@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeHistory, recordLocal, summarize, type HistoryEntry } from './history';
+import type { HandResult } from './state';
 
 const entry = (id: string, playedAt: number, won: boolean, source: HistoryEntry['source'] = 'local'): HistoryEntry => ({
   id,
@@ -36,6 +37,14 @@ describe('recordLocal', () => {
   });
   it('gives the same id every time for the same finished match, so a reload cannot add it twice', () => {
     expect(recordLocal(finished, 1000).id).toBe(recordLocal(finished, 5000).id);
+  });
+  it('keeps the human seat\'s hand stats when the match has hand results', () => {
+    const history = [
+      { callerSeat: 0, fell: false, score: [120, 42] },
+      { callerSeat: 1, fell: true, score: [162, 0] },
+    ] as unknown as HandResult[];
+    expect(recordLocal({ ...finished, history }, 1).hands).toEqual({ hands: 2, calls: 1, falls: 0, points: 282 });
+    expect(recordLocal(finished, 1).hands).toBeUndefined();
   });
   it('marks a lost match', () => {
     expect(recordLocal({ ...finished, scores: [800, 1005], winner: 1 }, 1).won).toBe(false);

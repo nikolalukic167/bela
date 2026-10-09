@@ -32,6 +32,8 @@ export type BelaAction =
 
 export interface HandResult {
   caller: number; // team
+  /** Seat that called trump. Missing in games saved before it was recorded. */
+  callerSeat?: number;
   trump: Suit;
   cardPoints: [number, number];
   declarations: [number, number];

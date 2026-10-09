@@ -17,7 +17,7 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 |---|---|---|---|---|
 | 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | **done** (`src/games/bela`; tutorial in `tutorial.ts` + `ui/BelaTutorial.tsx`) |
 | 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **done** (see §15): accounts, private tables, server-side bots, admin tools, reconnect, turn timers, rematch, cleanup, e2e |
-| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **mostly done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph; personal stats page open |
+| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph, personal stats page (`/stats`) |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
 | 5 | **Competitive** | Seasons/leagues, tournaments (round-robin, brackets), clubs, replays, achievements | 3, 4 | |
 | 6 | **Extras** | Cosmetics, premium analytics, sponsored tournaments, other games (Briškula, Trešeta), physical-table scorekeeper | 3 | |
@@ -100,7 +100,7 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
 | `presence` | `tableId`, `userId`, `lastSeen` | Last heartbeat per human at a running table. Separate from `tables` so heartbeats don't re-run every `watch` query. |
-| `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt` | One row per finished non-test match, written with the rating update. |
+| `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt`, `hands` (per scored hand: `callerSeat`, `fell`, `score`) | One row per finished non-test match, written with the rating update. `hands` feeds personal stats; rows from before it was added don't have it. |
 | `ratings` | `userId`, `mu`, `sigma`, `gamesPlayed`, `lastPlayedAt`, `display` (mu − 3σ, indexed for the board) | OpenSkill, not a single Elo number. Solo scope only; pair ratings come with phase 4. |
 | `ratingHistory` | `userId`, `gameId`, `mu`, `sigma`, `display`, `delta`, `at` | One point per player per rated game; feeds the rating graph. |
 | `chat` | `tableId`, `userId`, `seat`, `name`, `phrase` \| `text`, `at`, `expiresAt` | Quick phrase key, or lobby-only free text. Hidden after 10 min (`CHAT_TTL_MS`), deleted by an hourly purge. |
@@ -218,7 +218,7 @@ CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build
 ## 14. Open decisions (record as ADRs when settled)
 
 1. Display names: guests and username accounts pick their own (2–24 chars, not unique; `users.rename` exists, no UI yet). Google name by default for Google users? Uniqueness rules? Offensive-name filter?
-2. Do signed-in local games against bots count for personal stats (unrated)?
+2. Do signed-in local games against bots count for personal stats (unrated)? For now `/stats` shows them in their own labelled section, never mixed with online stats.
 3. Reconnect grace and turn-timer defaults per mode (quick vs long game). Current defaults: 90 s grace, 45 s per move, 30 s on the hand summary, same for every table.
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
 5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
@@ -243,4 +243,6 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 
 **Reconnect** is built (§7): heartbeats, a 90 s grace period, stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
 
-**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: per-table grace and timer settings, personal stats page, action-log compaction for old friendlies.
+**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: per-table grace and timer settings, action-log compaction for old friendlies.
+
+**Personal stats** (`/stats`, `convex/stats.ts`, pure `src/games/bela/stats.ts`): matches, win rate, average match points; from the hand records, how often the player calls trump, how often their call falls (pad) and points per hand; results per human partner (`partnerStats`); the rating graph from History. Local games against bots (from the device's history) are a separate, labelled section.

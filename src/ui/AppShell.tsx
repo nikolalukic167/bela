@@ -176,6 +176,11 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                   {t('menu.history')}
                 </NavLink>
               </li>
+              <li>
+                <NavLink to="/stats" onClick={close}>
+                  {t('menu.stats')}
+                </NavLink>
+              </li>
             </ul>
           </li>
 

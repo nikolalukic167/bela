@@ -113,6 +113,8 @@ export default defineSchema({
     /** Sorted user ids of a rated four, for the quartet cap. */
     quartetKey: v.optional(v.string()),
     endedAt: v.number(),
+    /** Per scored hand: who called trump, whether it fell, what each team wrote (personal stats). */
+    hands: v.optional(v.array(v.object({ callerSeat: v.number(), fell: v.boolean(), score: v.array(v.number()) }))),
   })
     .index('by_table', ['tableId'])
     .index('by_quartet', ['quartetKey', 'endedAt']),
