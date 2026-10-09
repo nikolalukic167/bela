@@ -15,7 +15,7 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 
 | # | Phase | Delivers | Depends on | Status |
 |---|---|---|---|---|
-| 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | mostly done (`src/games/bela`) |
+| 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | **done** (`src/games/bela`; tutorial in `tutorial.ts` + `ui/BelaTutorial.tsx`) |
 | 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **done** (see §15): accounts, private tables, server-side bots, admin tools, reconnect, turn timers, rematch, cleanup, e2e |
 | 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **mostly done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph; personal stats page open |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
@@ -130,7 +130,8 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - State: local React state + Convex reactive queries. No global store until a concrete need appears.
 - Optimistic UI only for harmless things (selecting a card). Moves wait for the server.
 - i18n: every string through `i18n`; Croatian and English required for every new feature; plural/format helpers, no concatenated sentences. Card deck styles (French, Hungarian, Dalmatian-style) are theme data, not branches in components.
-- Accessibility: keyboard play, visible focus, not colour-only suit cues, `prefers-reduced-motion` respected.
+- Accessibility: keyboard play, visible focus, not colour-only suit cues, `prefers-reduced-motion` respected. In practice: cards, the trump picker, dialogs and the menu are real buttons; the trump picker and dialogs take focus when they open, focus returns to the hand when the turn comes back (←/→ move between playable cards), and the menu closes on Escape. Suits are told apart by glyph shape (or Hungarian emblem) and every card has a text label, so colour is never the only cue. Under `prefers-reduced-motion` all animations and transitions are cut to ~0. `e2e/a11y.spec.ts` runs axe (WCAG 2.1 A/AA) on home, table, tutorial, online lobby, table lobby, menu, rules, history and leaderboard, and plays the tutorial with the keyboard only.
+- Tutorial (`/tutorial`): one guided hand against easy bots on a fixed deal (`TUTORIAL_DECK`). The learner's trump call is scripted (only hearts is legal) so the talon brings a 50 sequence and bela as the tips promise; tips for trump calling, leading, following suit, declarations and scoring come from the pure `tutorialTip(view)`.
 - Chat during rated play: **emotes/quick phrases only**, no free text (partners must not share hands). Free chat only in the lobby and unrated friendlies, off by default for rated tables.
 
 ## 9. Security
@@ -193,7 +194,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 | View leakage | Vitest | See 9.1. Release gate. |
 | Server | `convex-test` (in `tests/convex`) | Not-your-turn, illegal action, wrong seat, double-submit, stale version, reconnect/abandon timers, rating update atomicity, authorisation for host-only actions. |
 | Ratings | Vitest | Known OpenSkill cases; bot/unrated games change nothing; abandon handling. |
-| E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. |
+| E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. Accessibility: axe on every main screen, keyboard-only tutorial hand, reduced motion. |
 | UI | Vitest + Testing Library (sparingly) | Language switch, legal-card hints, accessibility smoke. |
 
 CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build → `npm audit` (prod, high), and an **e2e** job: `npm run e2e` starts a throwaway local Convex backend (`CONVEX_AGENT_MODE=anonymous`, no account or secrets), builds against it and runs Playwright (`e2e/`): two browser contexts create, join and play a table and reconnect; local play on desktop and phone; console errors (incl. CSP violations) fail the test. `deploy.yml` (on `main`) lints, tests and deploys Pages + Convex. Actions are pinned to commit SHAs; Dependabot updates npm and actions weekly. A red check blocks merge.

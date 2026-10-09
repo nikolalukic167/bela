@@ -18,6 +18,8 @@ interface Options {
  */
 export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Options): GamePort<A, V> & {
   newGame: (options: O) => void;
+  /** Starts from a prepared state (e.g. the tutorial's fixed deal). */
+  load: (state: S) => void;
   quit: () => void;
 } {
   const [state, setState] = useState<S | null>(() => loadJson<S>(opts.storageKey));
@@ -56,6 +58,8 @@ export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Optio
 
   const newGame = useCallback((options: O) => setState(def.setup(options, randomSeed())), [def]);
 
+  const load = useCallback((s: S) => setState(s), []);
+
   const quit = useCallback(() => {
     removeKey(opts.storageKey);
     setState(null);
@@ -63,5 +67,5 @@ export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Optio
 
   const view = state ? def.view(state, opts.humanSeat) : null;
   const legalActions = state ? def.legalActions(state, opts.humanSeat) : [];
-  return { view, legalActions, act, newGame, quit };
+  return { view, legalActions, act, newGame, load, quit };
 }

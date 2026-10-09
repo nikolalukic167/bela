@@ -2,6 +2,7 @@ import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AccountProvider } from './account/account';
 import { I18nProvider } from './i18n/i18n';
 import { AdminPage } from './admin/AdminPage';
+import { BelaTutorial } from './games/bela/ui/BelaTutorial';
 import { OnlineLobbyPage } from './online/OnlineLobby';
 import { OnlineTablePage } from './online/OnlineTable';
 import { History } from './pages/History';
@@ -21,6 +22,7 @@ export function App() {
               <Route path="/" element={<Home />} />
               <Route path="/play/:gameId" element={<Play />} />
               <Route path="/rules/:gameId" element={<Rules />} />
+              <Route path="/tutorial" element={<BelaTutorial />} />
               <Route path="/online" element={<OnlineLobbyPage />} />
               <Route path="/t/:code" element={<OnlineTablePage />} />
               <Route path="/history" element={<History />} />

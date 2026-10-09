@@ -152,9 +152,18 @@ button.playing-card:focus-visible { outline: 3px solid var(--color-warning); out
   .hand--active button.hand-card:not(:disabled):hover { transform: translateY(-14%); }
 }
 
+.trump-btn:focus-visible { outline: 3px solid var(--color-warning); outline-offset: 2px; }
+/* The lit outline of playable cards must not hide keyboard focus. */
+.hand button.hand-card:focus-visible { outline: 3px solid var(--color-warning); outline-offset: 2px; z-index: 1; }
+
+/* Reduced motion: no fades, lifts or spinners that move (architecture §8). */
 @media (prefers-reduced-motion: reduce) {
-  .trick-card, .decl-banner { animation: none; }
-  button.playing-card { transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Short landscape phones. */
@@ -162,3 +171,11 @@ button.playing-card:focus-visible { outline: 3px solid var(--color-warning); out
   .felt { padding: 4px; gap: 2px; }
   .your-turn { display: none; }
 }
+
+/* Soft alerts tint the background; their tinted text falls below 4.5:1 on this dark theme,
+   so the text stays in the base colour and the tint carries the meaning. */
+.alert.alert-soft { color: var(--color-base-content); }
+
+/* daisyUI's menu titles and "coming soon" entries are too faint to read (axe color-contrast). */
+.menu .menu-title { color: color-mix(in oklab, var(--color-base-content) 78%, transparent); }
+.menu .menu-disabled > * { color: color-mix(in oklab, var(--color-base-content) 72%, transparent); }

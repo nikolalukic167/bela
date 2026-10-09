@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
@@ -113,10 +113,14 @@ interface ScreenProps {
   names?: (string | null)[];
   /** Watching a bot match: no controls, no hand summary dialog. */
   spectating?: boolean;
+  /** Guidance shown above the table and in the hand summary (tutorial). */
+  coach?: ReactNode;
+  /** Label of the hand summary's "next" button. */
+  nextLabel?: string;
 }
 
 /** Navbar score, felt table, score sheet and hand summary: shared by local and online play. */
-export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating }: ScreenProps) {
+export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating, coach, nextLabel }: ScreenProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [showSheet, setShowSheet] = useState(false);
@@ -131,6 +135,7 @@ export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectat
   return (
     <SeatNames.Provider value={names ?? null}>
       <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
+        {view.phase !== 'handOver' && view.phase !== 'matchOver' && coach}
         <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
           <Table view={view} legal={spectating ? [] : game.legalActions} onAct={spectating ? () => undefined : onAct} />
           <aside className="hidden lg:flex flex-col gap-4 bg-base-300 p-6">
@@ -160,7 +165,7 @@ export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectat
           </Modal>
         )}
         {!spectating && (view.phase === 'handOver' || view.phase === 'matchOver') && (
-          <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} />
+          <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} note={coach} nextLabel={nextLabel} />
         )}
         {game.secondsLeft != null && <TurnCountdown left={game.secondsLeft} />}
       </AppShell>
@@ -244,6 +249,15 @@ function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; on
   };
   const playing = view.phase === 'play';
 
+  // Keyboard play: the played card's button disappears and takes focus with it, so when the
+  // turn comes back focus returns to the hand instead of the top of the page.
+  const handRef = useRef<HTMLElement>(null);
+  const myPlay = playing && view.isMyTurn;
+  useEffect(() => {
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (myPlay && lost) handRef.current?.querySelector<HTMLButtonElement>('button.hand-card:not(:disabled)')?.focus();
+  }, [myPlay]);
+
   return (
     <main className="felt">
       {view.seats
@@ -252,11 +266,12 @@ function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; on
           <Opponent key={s.seat} view={view} seat={s.seat} />
         ))}
 
-      <div className="trick" aria-label="trick">
+      <div className="trick" role="group" aria-label={t('table.trick')}>
         {view.trick.map((p) => (
           <Card
             key={cardId(p.card)}
             card={p.card}
+            label={cardLabel(p.card, t)}
             className={`trick-card trick-card--${positionOf(p.seat, view.options, view.seat)} ${
               view.trickComplete && p.winning ? 'trick-card--win' : ''
             }`}
@@ -267,7 +282,7 @@ function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; on
       <TrumpToast view={view} />
       <DeclarationsAnnouncement view={view} />
 
-      <section className="me">
+      <section className="me" ref={handRef} onKeyDown={moveFocus}>
         <SeatBubble view={view} seat={view.seat} />
         <div className={`hand ${playing && view.isMyTurn ? 'hand--active' : ''}`}>
           {view.hand.map((c) => (
@@ -275,7 +290,7 @@ function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; on
               key={cardId(c)}
               card={c}
               className="hand-card"
-              label={`${c.rank} ${t(`suit.${c.suit}` as StringKey)}`}
+              label={cardLabel(c, t)}
               onClick={() => play(c)}
               disabled={playing ? !canPlay(c) : false}
               selected={!!selected && sameCard(selected, c)}
@@ -308,6 +323,18 @@ function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; on
   );
 }
 
+const cardLabel = (c: CardT, t: (k: StringKey) => string) => `${c.rank} ${t(`suit.${c.suit}` as StringKey)}`;
+
+/** Left/right arrows move between the playable cards of the hand. */
+function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const cards = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button.hand-card:not(:disabled)')];
+  const i = cards.indexOf(document.activeElement as HTMLButtonElement);
+  if (i < 0) return;
+  e.preventDefault();
+  cards[(i + (e.key === 'ArrowRight' ? 1 : cards.length - 1)) % cards.length].focus();
+}
+
 function Opponent({ view, seat }: { view: SeatView; seat: number }) {
   const { t } = useI18n();
   const names = useContext(SeatNames);
@@ -329,7 +356,7 @@ function Opponent({ view, seat }: { view: SeatView; seat: number }) {
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-sm font-bold">
             {name}
-            {info.isDealer && <sup className="ml-0.5 text-[10px] opacity-70" title="dealer">D</sup>}
+            {info.isDealer && <sup className="ml-0.5 text-[10px] opacity-70" title={t('trump.dealer')}>D</sup>}
           </span>
           <span className="truncate text-xs text-base-content/70">{note}</span>
           {info.bela && <span className="badge badge-xs badge-error mt-0.5 self-center">{t('decl.bela')}</span>}
@@ -353,7 +380,7 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
         {note && <em className="font-normal">{note}</em>}
       </span>
       {info.isDealer && (
-        <span className="badge badge-xs badge-soft" title="dealer">
+        <span className="badge badge-xs badge-soft" title={t('trump.dealer')}>
           D
         </span>
       )}
@@ -366,6 +393,9 @@ function TrumpPicker({ view, legal, onAct }: { view: SeatView; legal: BelaAction
   const { t } = useI18n();
   const names = useContext(SeatNames);
   const count = (suit: Suit) => view.hand.filter((c) => c.suit === suit).length;
+  // The call is the only thing to do now: start keyboard users on it.
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => panel.current?.querySelector<HTMLButtonElement>('.trump-btn:not(:disabled)')?.focus(), []);
   // Others first as they sit around the table, then us; the call goes to whoever is up.
   const order = [view.seat, ...view.seats.map((x) => x.seat).filter((x) => x !== view.seat)];
   const status = (seat: number) => {
@@ -377,6 +407,7 @@ function TrumpPicker({ view, legal, onAct }: { view: SeatView; legal: BelaAction
   };
   return (
     <div
+      ref={panel}
       className="trump-panel card bg-base-300 shadow-xl absolute inset-x-3 top-3 z-10 mx-auto max-w-md"
       role="dialog"
       aria-label={t('trump.title')}
@@ -410,7 +441,8 @@ function TrumpPicker({ view, legal, onAct }: { view: SeatView; legal: BelaAction
               <button
                 key={suit}
                 type="button"
-                className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white"
+                className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white disabled:bg-[#fbfaf5] disabled:opacity-35"
+                disabled={!legal.some((a) => a.type === 'call' && a.suit === suit)}
                 onClick={() => onAct({ type: 'call', suit })}
               >
                 <span className={`suit suit--${suit} text-3xl leading-none`}><SuitMark suit={suit} /></span>
