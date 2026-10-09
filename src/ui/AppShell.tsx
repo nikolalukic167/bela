@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAccount } from '../account/account';
 import { SignInDialog } from '../account/SignInDialog';
 import { GAMES } from '../core/registry';
 import { useI18n } from '../i18n/i18n';
 import { DECK_IDS, DECKS, DeckPreview } from './decks';
-import { BookIcon, CardsIcon, ClockIcon, GlobeIcon, HomeIcon, LogInIcon, LogOutIcon, MenuIcon, ShieldIcon, TrophyIcon, UserIcon, WrenchIcon } from './icons';
+import { BookIcon, CardsIcon, ChartIcon, ClockIcon, GlobeIcon, HomeIcon, LogInIcon, LogOutIcon, MenuIcon, ShieldIcon, TrophyIcon, UserIcon, WrenchIcon } from './icons';
 import { Logo } from './Logo';
 import { useSettings, type Speed } from './settings';
 
@@ -34,15 +34,55 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
   const atHome = useLocation().pathname === '/';
   const close = () => setOpen(false);
   useEffect(() => DECKS[deck].preload?.(), [deck]);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLUListElement>(null);
+  // Keyboard users: opening moves focus into the menu, Escape closes it and returns focus.
+  useEffect(() => {
+    if (!open) return;
+    // The drawer becomes visible through a CSS transition; focus once it can take focus.
+    let tries = 0;
+    let frame = 0;
+    const focusFirst = () => {
+      const first = menu.current?.querySelector<HTMLElement>('a, button');
+      first?.focus();
+      if (document.activeElement !== first && ++tries < 30) frame = requestAnimationFrame(focusFirst);
+    };
+    frame = requestAnimationFrame(focusFirst);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      menuButton.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   return (
     <div className="drawer">
-      <input id="app-drawer" type="checkbox" className="drawer-toggle" checked={open} onChange={(e) => setOpen(e.target.checked)} />
+      <input
+        id="app-drawer"
+        type="checkbox"
+        className="drawer-toggle"
+        checked={open}
+        onChange={(e) => setOpen(e.target.checked)}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
       <div className={`drawer-content flex flex-col ${fixed ? 'h-dvh overflow-hidden' : 'min-h-dvh'}`}>
         <header className="navbar bg-base-300/80 min-h-12 gap-1 px-2 shrink-0">
-          <label htmlFor="app-drawer" className="btn btn-square btn-ghost" aria-label={t('menu.open')}>
+          <button
+            ref={menuButton}
+            type="button"
+            className="btn btn-square btn-ghost"
+            aria-label={t('menu.open')}
+            aria-expanded={open}
+            onClick={() => setOpen(true)}
+          >
             <MenuIcon className="size-6" />
-          </label>
+          </button>
           {!atHome && (
             <Link to="/" className="btn btn-square btn-ghost" aria-label={t('nav.home')} title={t('nav.home')}>
               <HomeIcon className="size-6" />
@@ -61,7 +101,7 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
 
       <nav className="drawer-side z-50" aria-label={t('menu.title')}>
         <label htmlFor="app-drawer" aria-label={t('menu.close')} className="drawer-overlay" />
-        <ul className="menu bg-base-200 text-base-content min-h-full w-72 p-4 gap-1">
+        <ul ref={menu} className="menu bg-base-200 text-base-content min-h-full w-72 p-4 gap-1">
           <li className="mb-2">
             <Link to="/" onClick={close} aria-label={`Karte – ${t('nav.home')}`}>
               <Logo />
@@ -149,6 +189,12 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                 <NavLink to="/history" onClick={close}>
                   <ClockIcon />
                   {t('menu.history')}
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/stats" onClick={close}>
+                  <ChartIcon />
+                  {t('menu.stats')}
                 </NavLink>
               </li>
               <li>

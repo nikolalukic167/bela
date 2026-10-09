@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameDefinition } from '../core/game';
+import type { GamePort } from './gamePort';
 import { createRng, randomSeed } from '../core/rng';
 import { loadJson, removeKey, saveJson } from './storage';
 
@@ -15,7 +16,12 @@ interface Options {
  * system actions with delays, and persists the game to localStorage.
  * The UI only gets the human seat's view.
  */
-export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Options) {
+export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Options): GamePort<A, V> & {
+  newGame: (options: O) => void;
+  /** Starts from a prepared state (e.g. the tutorial's fixed deal). */
+  load: (state: S) => void;
+  quit: () => void;
+} {
   const [state, setState] = useState<S | null>(() => loadJson<S>(opts.storageKey));
   const rngRef = useRef(createRng(randomSeed()));
 
@@ -52,11 +58,14 @@ export function useGame<S, A, O, V>(def: GameDefinition<S, A, O, V>, opts: Optio
 
   const newGame = useCallback((options: O) => setState(def.setup(options, randomSeed())), [def]);
 
+  const load = useCallback((s: S) => setState(s), []);
+
   const quit = useCallback(() => {
     removeKey(opts.storageKey);
     setState(null);
   }, [opts.storageKey]);
 
   const view = state ? def.view(state, opts.humanSeat) : null;
-  return { view, act, newGame, quit };
+  const legalActions = state ? def.legalActions(state, opts.humanSeat) : [];
+  return { view, legalActions, act, newGame, load, quit };
 }

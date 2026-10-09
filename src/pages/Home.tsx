@@ -6,6 +6,7 @@ import { useI18n } from '../i18n/i18n';
 import { BOT_LEVELS, DEFAULT_BOT_LEVEL, type BotLevel } from '../games/bela/bots';
 import type { BelaState } from '../games/bela/state';
 import type { Card as CardT } from '../core/cards';
+import { TUTORIAL_DONE_KEY } from '../games/bela/ui/BelaTutorial';
 import { AppShell } from '../ui/AppShell';
 import { Card } from '../ui/Card';
 import { BookIcon, ClockIcon, GlobeIcon, PlayIcon, TrophyIcon } from '../ui/icons';
@@ -103,6 +104,12 @@ function BelaPanel({ online }: { online: boolean }) {
                 {t('home.playOnline')}
               </Link>
             )}
+            <Link
+              to="/tutorial"
+              className={`btn btn-ghost h-auto min-h-11 rounded-2xl py-2 text-sm ${loadJson<boolean>(TUTORIAL_DONE_KEY) ? '' : 'text-primary underline'}`}
+            >
+              {t('tut.start')}
+            </Link>
           </div>
         </div>
       </div>

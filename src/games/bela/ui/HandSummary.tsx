@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SuitMark } from '../../../ui/decks';
 import { fmt, useI18n } from '../../../i18n/i18n';
@@ -5,7 +6,16 @@ import { HomeIcon } from '../../../ui/icons';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import type { SeatView } from '../view';
 
-export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNext: () => void; onNewGame: () => void }) {
+interface Props {
+  view: SeatView;
+  onNext: () => void;
+  onNewGame: () => void;
+  /** Extra explanation above the numbers (tutorial). */
+  note?: ReactNode;
+  nextLabel?: string;
+}
+
+export function HandSummary({ view, onNext, onNewGame, note, nextLabel }: Props) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const r = view.history[view.history.length - 1];
@@ -20,6 +30,7 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
   );
   return (
     <Modal title={title}>
+      {note}
       <p className="mb-2">
         {t('trump.label')}: <span className={`suit suit--${r.trump} text-xl`}><SuitMark suit={r.trump} /></span> ·{' '}
         {fmt(t('trump.calledBy'), { name: t(r.caller === 0 ? 'team.us' : 'team.them') })}
@@ -52,13 +63,13 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
               <HomeIcon />
               {t('match.menu')}
             </button>
-            <button type="button" className="btn btn-primary" onClick={onNewGame}>
+            <button type="button" className="btn btn-primary" onClick={onNewGame} autoFocus>
               {t('match.again')}
             </button>
           </>
         ) : (
           <button type="button" className="btn btn-primary" onClick={onNext} autoFocus>
-            {t('hand.next')}
+            {nextLabel ?? t('hand.next')}
           </button>
         )}
       </ModalActions>

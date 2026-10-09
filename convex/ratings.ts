@@ -3,9 +3,9 @@ import { query, type MutationCtx } from './_generated/server';
 import { requireUser } from './lib/auth';
 import { DAILY_GAIN_CAP, DAILY_GAIN_WINDOW_MS, LEADERBOARD_MIN_AGE_MS, LEADERBOARD_MIN_GAMES, LEADERBOARD_SIZE } from './lib/config';
 import { gainsByOpponent, quartetKey, settleMatch } from './lib/ratingLogic';
-import { flagOn } from './lib/flags';
 import { logEvent } from './lib/log';
 import type { Seat } from './lib/tableLogic';
+import type { HandLine } from '../src/games/bela/stats';
 import { DEFAULT_CONFIG, displayRating, isProvisional, newRating, type PlayerRating, type RatingBook } from '../src/ratings/ratings';
 
 const toRating = (r: Doc<'ratings'>): PlayerRating => ({ mu: r.mu, sigma: r.sigma, gamesPlayed: r.gamesPlayed, lastPlayedAt: r.lastPlayedAt });
@@ -22,6 +22,7 @@ export async function recordGame(
   ctx: MutationCtx,
   table: Doc<'tables'>,
   result: { scores: [number, number]; winner: 0 | 1; abandonedBy?: Id<'users'> },
+  hands: HandLine[] = [],
 ) {
   if (table.isTest) return;
   const now = Date.now();
@@ -34,10 +35,12 @@ export async function recordGame(
     endReason: result.abandonedBy ? ('abandoned' as const) : ('normal' as const),
     ...(result.abandonedBy && { abandonedBy: result.abandonedBy }),
     endedAt: now,
+    hands,
   };
   const ids = players.filter((p): p is Id<'users'> => p !== null);
-  // With the ratings flag off (a kill switch, architecture §12) even a rated table's result changes no rating.
-  if (!table.rated || ids.length !== 4 || !(await flagOn(ctx, 'ratings'))) {
+  // Rated or not was settled when the table was created (architecture §1.6); the ratings flag
+  // only stops new rated tables, so a rated match that finishes after it is switched off still counts.
+  if (!table.rated || ids.length !== 4) {
     const gameId = await ctx.db.insert('games', { ...base, rated: false });
     logEvent('game.finished', { tableId: table._id, gameId, rated: false, endReason: base.endReason });
     return;

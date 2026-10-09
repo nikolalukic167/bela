@@ -6,13 +6,13 @@ export const NEXT_HAND_DELAY_MS = 4000;
 /** 'fast' tables play this many moves per scheduled call. */
 export const FAST_BATCH = 150;
 /** How long a dropped player's seat is held before a bot stands in (architecture §7). */
-export const RECONNECT_GRACE_MS = 90_000;
+export const RECONNECT_GRACE_MS = 60_000;
 /** Open table pages report in this often; a few missed beats fit inside the grace period. */
-export const HEARTBEAT_MS = 20_000;
+export const HEARTBEAT_MS = 15_000;
 /** A seated human who doesn't move in time gets a move played for them (architecture §7). */
-export const TURN_TIMEOUT_MS = 45_000;
+export const TURN_TIMEOUT_MS = 30_000;
 /** Nobody pressed "next" on the hand summary: the server deals on. */
-export const NEXT_HAND_TIMEOUT_MS = 30_000;
+export const NEXT_HAND_TIMEOUT_MS = 20_000;
 /** A table's clock: reconnect grace, time per move, time on the hand summary. */
 export interface TimerProfile {
   graceMs: number;
@@ -21,20 +21,21 @@ export interface TimerProfile {
 }
 /**
  * Picked by the host at creation and frozen with the table (architecture §14.3). "normal" is the
- * original 90/45/30 s. Which profile each mode (target, rated) should default to is an open decision.
+ * default for every table (decided in §14; the first version used 90/45/30 s). Even the quick grace
+ * period outlasts two heartbeats.
  */
 export const TIMER_PROFILES = {
-  relaxed: { graceMs: 180_000, turnMs: 90_000, nextHandMs: 60_000 },
+  relaxed: { graceMs: 120_000, turnMs: 60_000, nextHandMs: 40_000 },
   normal: { graceMs: RECONNECT_GRACE_MS, turnMs: TURN_TIMEOUT_MS, nextHandMs: NEXT_HAND_TIMEOUT_MS },
-  quick: { graceMs: 45_000, turnMs: 20_000, nextHandMs: 15_000 },
+  quick: { graceMs: 30_000, turnMs: 15_000, nextHandMs: 10_000 },
 } satisfies Record<string, TimerProfile>;
 export type TimerProfileName = keyof typeof TIMER_PROFILES;
 /** Lobbies never started, and tables everyone walked away from, are deleted after this. */
 export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
 /** Rated games a player needs before appearing on the public leaderboard (architecture §9.1). */
 export const LEADERBOARD_MIN_GAMES = 10;
-/** ...and an account at least this old, so a farm of fresh accounts can't fill the board (§9.1). */
-export const LEADERBOARD_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** ...and an account at least a day old, so a farm of fresh accounts can't fill the board (§9.1, decided §14). */
+export const LEADERBOARD_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 /**
  * Most display rating one player can gain off any single opponent in DAILY_GAIN_WINDOW_MS
  * (win-trading, §9.1). A new player's first win is worth about 2.4 points, so this is roughly
@@ -49,6 +50,8 @@ export const DAILY_GAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const ACT_LIMIT = { burst: 10, refillMs: 250 };
 export const LEADERBOARD_SIZE = 50;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
+/** Most open public tables the /online page lists (architecture §14.8). */
+export const PUBLIC_LOBBY_SIZE = 30;
 export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;
 /** Unambiguous characters only (no 0/O, 1/I/L). */
@@ -67,6 +70,15 @@ export const QUOTA_WARN_AT = 0.7;
 export const CALLS_PER_ACTION = 5;
 /** Finished unrated tables lose their move log after this; the games row stays (architecture §12). */
 export const ACTION_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Chat (architecture §8): entries disappear after this; a purge deletes them. */
+export const CHAT_TTL_MS = 10 * 60 * 1000;
+/** At most this many messages per player per table within the window. */
+export const CHAT_BURST = 5;
+export const CHAT_WINDOW_MS = 10_000;
+/** Lobby free text, in characters. */
+export const CHAT_TEXT_MAX = 120;
+/** Messages a table's chat query returns, newest last. */
+export const CHAT_LIST_SIZE = 30;
 /** Name changes allowed per window (architecture §9.4). */
 export const RENAME_LIMIT = 3;
 export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;

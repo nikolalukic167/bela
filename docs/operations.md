@@ -20,7 +20,7 @@ Rows in the `config` table, switched in the admin panel (**Feature flags**). A m
 
 | Flag | Off means |
 |---|---|
-| `ratings` | `tables.create({ rated: true })` answers `FEATURE_OFF`; a rated match that ends while off is recorded unrated and changes no rating. Leaderboard and history stay readable. |
+| `ratings` | `tables.create({ rated: true })` answers `FEATURE_OFF`. Tables already created as rated stay rated and are rated when they finish (rated status is frozen at creation, architecture §1.6). Leaderboard and history stay readable. |
 | `rematch` | `tables.rematch` answers `FEATURE_OFF`; "Play again" goes back to the table list. |
 | `chat` | Read by the chat feature (lobby / emote chat). |
 

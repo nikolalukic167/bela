@@ -117,3 +117,9 @@ export const ArrowLeftIcon = (p: P) => (
     <path d="M19 12H5M11 6l-6 6 6 6" />
   </Icon>
 );
+
+export const ChartIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+  </Icon>
+);

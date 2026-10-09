@@ -1,6 +1,6 @@
 import type { Card, Suit } from '../../core/cards';
 import type { Declaration } from './declarations';
-import { currentPlayer, legalActions } from './engine';
+import { currentPlayer, legalActions, seatCount } from './engine';
 import { winningIndex, type Played } from './legal';
 import { sortHand } from './sort';
 import type { BelaAction, BelaOptions, BelaState, HandResult, Phase } from './state';
@@ -81,7 +81,7 @@ export function viewFor(s: BelaState, seat: number): SeatView {
     mustCall: s.phase === 'trump' && turn === seat && seat === s.dealer,
     trump: s.trump,
     callerSeat: s.callerSeat,
-    seats: [0, 1, 2, 3].map((p) => ({
+    seats: Array.from({ length: seatCount(s.options) }, (_, p) => ({
       seat: p,
       cardCount: s.hands[p].length + (s.talon[p]?.length ?? 0),
       isDealer: p === s.dealer,

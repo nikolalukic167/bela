@@ -12,6 +12,7 @@ import {
   INVITE_TTL_MS,
   LOOKUP_LIMIT,
   MAX_ACTIVE_TABLES_PER_USER,
+  PUBLIC_LOBBY_SIZE,
   NEXT_HAND_DELAY_MS,
   TIMER_PROFILES,
   STALE_TABLE_MS,
@@ -49,7 +50,8 @@ import { viewFor } from '../src/games/bela/view';
 import { recordGame } from './ratings';
 import { ratedBlocker } from './lib/ratingLogic';
 import { belaGame } from '../src/games/bela/game';
-import { blockedBetween } from './lib/blocks';
+import { handLines } from '../src/games/bela/stats';
+import { blockedBetween, blockedWith } from './lib/blocks';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -150,7 +152,7 @@ export async function commit(
   if (isFinished(state)) {
     const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (state.winner === 1 ? 1 : 0) as 0 | 1 };
     await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
-    await recordGame(ctx, table, result);
+    await recordGame(ctx, table, result, handLines(state.history));
     return;
   }
   await scheduleNext(ctx, table, next);
@@ -169,8 +171,13 @@ async function activeTableCount(ctx: QueryCtx, userId: Id<'users'>): Promise<num
 // ---------- lobby ----------
 
 export const create = mutation({
-  args: { options: optionsValidator, rated: v.optional(v.boolean()), timerProfile: v.optional(timerProfileValidator) },
-  handler: async (ctx, { options, rated, timerProfile }) => {
+  args: {
+    options: optionsValidator,
+    rated: v.optional(v.boolean()),
+    timerProfile: v.optional(timerProfileValidator),
+    isPublic: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { options, rated, timerProfile, isPublic }) => {
     const user = await requireUser(ctx);
     if (rated && !(await flagOn(ctx, 'ratings'))) throw new TableError('FEATURE_OFF');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
@@ -183,6 +190,7 @@ export const create = mutation({
       options: { ...options, botLevel: options.botLevel ?? 'medium' },
       rated: rated === true,
       timerProfile: timerProfile ?? 'normal',
+      isPublic: isPublic === true,
       status: 'lobby',
       seats,
       isTest: false,
@@ -214,6 +222,8 @@ export const join = mutation({
     if (ownSeat(seats, user._id) >= 0) return table.code; // idempotent: rejoining restores the seat
     if (table.status !== 'lobby') throw new TableError('WRONG_STATE');
     if (table.codeExpiresAt !== undefined && Date.now() > table.codeExpiresAt) throw new TableError('CODE_EXPIRED');
+    // Rated tables seat account holders only (the same rule `start` enforces), so nobody waits for a guest to be refused.
+    if (table.rated && user.isAnonymous !== false) throw new TableError('RATED_NEEDS_ACCOUNTS');
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
@@ -454,7 +464,7 @@ async function abandon(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users
   const seat = ownSeat(table.seats as Seat[], userId);
   const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (seat % 2 === 0 ? 1 : 0) as 0 | 1 };
   await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
-  await recordGame(ctx, table, { ...result, abandonedBy: userId });
+  await recordGame(ctx, table, { ...result, abandonedBy: userId }, handLines(state.history));
 }
 
 /**
@@ -495,6 +505,7 @@ export const rematch = mutation({
       speed: table.speed,
       rated: table.rated,
       timerProfile: table.timerProfile,
+      isPublic: table.isPublic,
       createdAt: Date.now(),
       codeExpiresAt: Date.now() + INVITE_TTL_MS,
     });
@@ -634,7 +645,51 @@ export const watch = query({
       /** The deck seed: null until the match is finished. With `options` and the action log it replays the game. */
       seed,
       timerProfile: table.timerProfile ?? 'normal',
+      isPublic: table.isPublic === true,
     };
+  },
+});
+
+/**
+ * Public tables waiting for players, newest first (architecture §14.8). Only what someone needs to
+ * decide to join: the code to join with, the host's name, options, clock, rated and seats taken.
+ * No user ids. Private, full, started, expired and test tables never appear, nor tables with
+ * someone the caller has blocked or is blocked by.
+ */
+export const publicLobby = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const blocked = await blockedWith(ctx, user._id);
+    const now = Date.now();
+    const rows = await ctx.db
+      .query('tables')
+      .withIndex('by_public', (q) => q.eq('isPublic', true).eq('status', 'lobby'))
+      .order('desc')
+      .take(PUBLIC_LOBBY_SIZE * 3);
+    const out = [];
+    for (const t of rows) {
+      const seats = t.seats as Seat[];
+      if (t.isTest || firstEmpty(seats) < 0 || (t.codeExpiresAt !== undefined && now > t.codeExpiresAt)) continue;
+      // A table `join` would refuse because of a block isn't offered at all.
+      if (seats.some((s) => (s.kind === 'user' && blocked.has(s.userId)) || (s.kind === 'bot' && s.standInFor && blocked.has(s.standInFor)))) continue;
+      const host = seats.find((s) => s.kind === 'user' && s.userId === t.hostId);
+      out.push({
+        code: t.code,
+        host: host && host.kind === 'user' ? host.name : '?',
+        target: t.options.target,
+        direction: t.options.direction,
+        belaAlwaysCounts: t.options.belaAlwaysCounts,
+        tie: t.options.tie,
+        botLevel: t.options.botLevel ?? 'medium',
+        timerProfile: t.timerProfile ?? 'normal',
+        rated: t.rated === true,
+        seatsTaken: seats.filter((s) => s.kind !== 'empty').length,
+        createdAt: t.createdAt,
+      });
+      if (out.length === PUBLIC_LOBBY_SIZE) break;
+    }
+    return out;
   },
 });
 
@@ -681,7 +736,7 @@ export const history = query({
         target: t.options.target,
         scores: [t.result.scores[team], t.result.scores[1 - team]] as [number, number],
         won: t.result.winner === team,
-        players: [name((mine + 2) % 4), name((mine + 1) % 4), name((mine + 3) % 4)],
+        players: [name((mine + 2) % seats.length), name((mine + 1) % seats.length), name((mine + 3) % seats.length)],
       });
     }
     return out.sort((a, b) => b.playedAt - a.playedAt);

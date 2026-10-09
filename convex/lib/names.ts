@@ -69,3 +69,22 @@ export function renameCheck(times: number[], now: number): { ok: true; times: nu
   const recent = times.filter((at) => at > now - RENAME_WINDOW_MS);
   return recent.length >= RENAME_LIMIT ? { ok: false } : { ok: true, times: [...recent, now] };
 }
+
+/**
+ * What makes two display names the same (architecture §14.1): case and spacing don't count,
+ * so "Ana", "ana" and " Ana " collide. Letters do: "Đurđa" and "Durda" are two people.
+ */
+export function nameKey(name: string): string {
+  return name.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** The name, then "Name 2" … "Name 99", shortened to fit MAX_NAME_LENGTH. */
+export function nameVariants(name: string): string[] {
+  const base = name.replace(/\s+/g, ' ').trim();
+  const out = [base];
+  for (let n = 2; n < 100; n++) {
+    const suffix = ` ${n}`;
+    out.push(`${base.slice(0, MAX_NAME_LENGTH - suffix.length).trimEnd()}${suffix}`);
+  }
+  return out;
+}

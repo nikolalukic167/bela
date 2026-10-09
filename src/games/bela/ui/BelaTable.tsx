@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
 import { fmt, useI18n } from '../../../i18n/i18n';
@@ -8,6 +8,7 @@ import { SuitMark, useCardNames } from '../../../ui/decks';
 import { AppShell, type MenuAction } from '../../../ui/AppShell';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
+import type { GamePort } from '../../../ui/gamePort';
 import { useGame } from '../../../ui/useGame';
 import { HUMAN_SEAT } from '../engine';
 import { belaGame } from '../game';
@@ -38,12 +39,13 @@ export function BelaTable() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { speed } = useSettings();
-  const { view, act, newGame, quit } = useGame(belaGame, {
+  const game = useGame(belaGame, {
     humanSeat: HUMAN_SEAT,
     botDelay: SPEED_DELAYS[speed].bot,
     autoDelay: SPEED_DELAYS[speed].auto,
     storageKey: 'bela:v2',
   });
+  const { view, newGame, quit } = game;
   const [showSettings, setShowSettings] = useState(false);
   const [lastOptions, setLastOptions] = useState<BelaOptions>(belaGame.defaultOptions);
   // Home's "Igraj protiv botova" arrives with the chosen strength and starts straight away.
@@ -78,8 +80,7 @@ export function BelaTable() {
   return (
     <>
       <TableScreen
-        view={view}
-        onAct={act}
+        game={{ ...game, view }}
         // "Igraj ponovno": a new match at once, same options (full options stay under menu > Nova igra).
         onMatchEnd={() => {
           quit();
@@ -102,9 +103,8 @@ export function BelaTable() {
 }
 
 interface ScreenProps {
-  /** The seat's view; teams are re-oriented so "us" is the viewer's team. */
-  view: SeatView;
-  onAct: Act;
+  /** Local or online game; teams in its view are re-oriented so "us" is the viewer's team. */
+  game: GamePort<BelaAction, SeatView> & { view: SeatView };
   /** Pressed on the match-over summary. */
   onMatchEnd: () => void;
   /** Extra entries at the top of the menu (new game, leave table...). */
@@ -113,14 +113,21 @@ interface ScreenProps {
   names?: (string | null)[];
   /** Watching a bot match: no controls, no hand summary dialog. */
   spectating?: boolean;
+  /** Guidance shown above the table and in the hand summary (tutorial). */
+  coach?: ReactNode;
+  /** Label of the hand summary's "next" button. */
+  nextLabel?: string;
+  /** Extra controls in the navbar next to the score (e.g. online quick messages). */
+  toolbar?: ReactNode;
 }
 
 /** Navbar score, felt table, score sheet and hand summary: shared by local and online play. */
-export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = [], names, spectating }: ScreenProps) {
+export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating, coach, nextLabel, toolbar }: ScreenProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [showSheet, setShowSheet] = useState(false);
-  const view = perspective(rawView);
+  const view = perspective(game.view);
+  const onAct: Act = game.act;
   const actions: MenuAction[] = [
     ...gameActions,
     { label: t('score.sheet'), onClick: () => setShowSheet(true) },
@@ -129,9 +136,10 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
 
   return (
     <SeatNames.Provider value={names ?? null}>
-      <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
+      <AppShell fixed gameActions={actions} center={<ScoreBar view={view} toolbar={toolbar} />}>
+        {view.phase !== 'handOver' && view.phase !== 'matchOver' && coach}
         <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
-          <Table view={view} onAct={spectating ? () => undefined : onAct} />
+          <Table view={view} legal={spectating ? [] : game.legalActions} onAct={spectating ? () => undefined : onAct} />
           <aside className="hidden lg:flex flex-col gap-4 bg-base-300 p-6">
             <div className="flex items-end justify-between">
               {view.trump ? <TrumpTile view={view} large /> : <span />}
@@ -159,14 +167,15 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
           </Modal>
         )}
         {!spectating && (view.phase === 'handOver' || view.phase === 'matchOver') && (
-          <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} />
+          <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} note={coach} nextLabel={nextLabel} />
         )}
+        {game.secondsLeft != null && <TurnCountdown left={game.secondsLeft} />}
       </AppShell>
     </SeatNames.Provider>
   );
 }
 
-function ScoreBar({ view }: { view: SeatView }) {
+function ScoreBar({ view, toolbar }: { view: SeatView; toolbar?: ReactNode }) {
   const { t } = useI18n();
   const tile = (label: string, score: number) => (
     <div className="flex min-w-14 flex-col items-center rounded-xl bg-base-200 px-3 py-0.5 leading-tight">
@@ -180,6 +189,7 @@ function ScoreBar({ view }: { view: SeatView }) {
         {tile(t('team.us'), view.scores[0])}
         {tile(t('team.them'), view.scores[1])}
       </div>
+      {toolbar && <div className="flex items-center">{toolbar}</div>}
       {view.trump && (
         <div className="lg:hidden">
           <TrumpTile view={view} />
@@ -218,19 +228,40 @@ function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
 
 type Act = (a: BelaAction) => void;
 
-function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
+/** Shown for the last seconds of the viewer's turn timer; at zero the server moves for them. */
+function TurnCountdown({ left }: { left: number }) {
+  const { t } = useI18n();
+  return (
+    <div className="pointer-events-none fixed top-16 left-1/2 z-30 -translate-x-1/2" role="timer" aria-live="polite">
+      <span className={`badge badge-lg ${left <= 5 ? 'badge-error' : 'badge-warning'}`}>
+        {t('online.timeLeft')}: {left} s
+      </span>
+    </div>
+  );
+}
+
+function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; onAct: Act }) {
   const { t } = useI18n();
   const cardNames = useCardNames();
   const [selected, setSelected] = useState<CardT | null>(null);
   useEffect(() => setSelected(null), [view.isMyTurn, view.phase]);
 
-  const canPlay = (c: CardT) => view.playable.some((l) => sameCard(l, c));
+  const canPlay = (c: CardT) => legal.some((l) => l.type === 'play' && sameCard(l.card, c));
   const play = (c: CardT) => {
     if (!canPlay(c)) return;
     if (canHover() || (selected && sameCard(selected, c))) onAct({ type: 'play', card: c });
     else setSelected(c);
   };
   const playing = view.phase === 'play';
+
+  // Keyboard play: the played card's button disappears and takes focus with it, so when the
+  // turn comes back focus returns to the hand instead of the top of the page.
+  const handRef = useRef<HTMLElement>(null);
+  const myPlay = playing && view.isMyTurn;
+  useEffect(() => {
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (myPlay && lost) handRef.current?.querySelector<HTMLButtonElement>('button.hand-card:not(:disabled)')?.focus();
+  }, [myPlay]);
 
   return (
     <main className="felt">
@@ -240,11 +271,12 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
           <Opponent key={s.seat} view={view} seat={s.seat} />
         ))}
 
-      <div className="trick" aria-label={t('table.trick')}>
+      <div className="trick" role="group" aria-label={t('table.trick')}>
         {view.trick.map((p) => (
           <Card
             key={cardId(p.card)}
             card={p.card}
+            label={cardNames.card(p.card)}
             className={`trick-card trick-card--${positionOf(p.seat, view.options, view.seat)} ${
               view.trickComplete && p.winning ? 'trick-card--win' : ''
             }`}
@@ -255,7 +287,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
       <TrumpToast view={view} />
       <DeclarationsAnnouncement view={view} />
 
-      <section className="me">
+      <section className="me" ref={handRef} onKeyDown={moveFocus}>
         <SeatBubble view={view} seat={view.seat} />
         <div className={`hand ${playing && view.isMyTurn ? 'hand--active' : ''}`}>
           {view.hand.map((c) => (
@@ -291,9 +323,20 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
         )}
       </section>
 
-      {view.phase === 'trump' && view.isMyTurn && <TrumpPicker view={view} onAct={onAct} />}
+      {view.phase === 'trump' && legal.length > 0 && <TrumpPicker view={view} legal={legal} onAct={onAct} />}
     </main>
   );
+}
+
+
+/** Left/right arrows move between the playable cards of the hand. */
+function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const cards = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button.hand-card:not(:disabled)')];
+  const i = cards.indexOf(document.activeElement as HTMLButtonElement);
+  if (i < 0) return;
+  e.preventDefault();
+  cards[(i + (e.key === 'ArrowRight' ? 1 : cards.length - 1)) % cards.length].focus();
 }
 
 function Opponent({ view, seat }: { view: SeatView; seat: number }) {
@@ -350,11 +393,14 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   );
 }
 
-function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
+function TrumpPicker({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; onAct: Act }) {
   const { t } = useI18n();
   const cardNames = useCardNames();
   const names = useContext(SeatNames);
   const count = (suit: Suit) => view.hand.filter((c) => c.suit === suit).length;
+  // The call is the only thing to do now: start keyboard users on it.
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => panel.current?.querySelector<HTMLButtonElement>('.trump-btn:not(:disabled)')?.focus(), []);
   // Others first as they sit around the table, then us; the call goes to whoever is up.
   const order = [view.seat, ...view.seats.map((x) => x.seat).filter((x) => x !== view.seat)];
   const status = (seat: number) => {
@@ -366,6 +412,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   };
   return (
     <div
+      ref={panel}
       className="trump-panel card bg-base-300 shadow-xl absolute inset-x-3 top-3 z-10 mx-auto max-w-md"
       role="dialog"
       aria-label={t('trump.title')}
@@ -399,7 +446,8 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
               <button
                 key={suit}
                 type="button"
-                className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white"
+                className="trump-btn btn h-auto min-h-[88px] flex-col gap-1.5 rounded-2xl border-0 bg-[#fbfaf5] py-2 text-neutral hover:bg-white disabled:bg-[#fbfaf5] disabled:opacity-35"
+                disabled={!legal.some((a) => a.type === 'call' && a.suit === suit)}
                 onClick={() => onAct({ type: 'call', suit })}
               >
                 <span className={`suit suit--${suit} text-3xl leading-none`}><SuitMark suit={suit} /></span>
@@ -411,7 +459,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
             );
           })}
         </div>
-        {!view.mustCall && (
+        {legal.some((a) => a.type === 'pass') && (
           <button type="button" className="btn btn-outline h-12 rounded-2xl border-accent" onClick={() => onAct({ type: 'pass' })}>
             {t('trump.pass')}
           </button>

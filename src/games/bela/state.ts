@@ -13,6 +13,8 @@ export interface BelaOptions {
   belaAlwaysCounts: boolean;
   /** Exact tie for the caller: points hang (visi) or the caller fails (pad). */
   tie: 'hangs' | 'fails';
+  /** Seats at the table. Missing (= 4) in games saved before modes existed. */
+  players?: 2 | 3 | 4;
   /** Difficulty of the bots (see bots/index.ts). Missing in games saved before levels existed. */
   botLevel?: 'easy' | 'medium' | 'hard' | 'expert';
 }
@@ -32,6 +34,8 @@ export type BelaAction =
 
 export interface HandResult {
   caller: number; // team
+  /** Seat that called trump. Missing in games saved before it was recorded. */
+  callerSeat?: number;
   trump: Suit;
   cardPoints: [number, number];
   declarations: [number, number];

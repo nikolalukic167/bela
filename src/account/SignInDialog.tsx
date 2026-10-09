@@ -6,6 +6,7 @@ import { errorKey } from '../online/errors';
 import { Modal } from '../ui/Modal';
 import { useAccount } from './account';
 import { GoogleIcon } from './GoogleIcon';
+import { NameSuggestion } from './NameSuggestion';
 import { isValidUsername, PASSWORD_MIN } from './username';
 
 type Tab = 'guest' | 'account';
@@ -31,8 +32,9 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
       await fn();
       onClose();
     } catch (e) {
-      // The name filter has its own message; everything else keeps the form's generic one.
-      setError(errorKey(e) === 'err.NAME_NOT_ALLOWED' ? 'err.NAME_NOT_ALLOWED' : fail);
+      // The name rules have their own messages; everything else keeps the form's generic one.
+      const key = errorKey(e);
+      setError(key === 'err.NAME_NOT_ALLOWED' || key === 'err.NAME_TAKEN' ? key : fail);
     } finally {
       setBusy(false);
     }
@@ -102,7 +104,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               autoFocus
               onChange={(e) => setUsername(e.target.value)}
             />
-            <span className="label">{t('auth.usernameHint')}</span>
+            <span className="label text-base-content/80">{t('auth.usernameHint')}</span>
           </label>
           <label className="fieldset">
             <span className="fieldset-legend">{t('auth.password')}</span>
@@ -113,7 +115,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               autoComplete={flow === 'signIn' ? 'current-password' : 'new-password'}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {flow === 'signUp' && <span className="label">{t('auth.passwordHint')}</span>}
+            {flow === 'signUp' && <span className="label text-base-content/80">{t('auth.passwordHint')}</span>}
           </label>
           <button type="submit" className="btn btn-primary" disabled={busy}>
             {t(flow === 'signIn' ? 'auth.signIn' : 'auth.signUp')}
@@ -134,6 +136,17 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
       {error && (
         <div role="alert" className="alert alert-error alert-soft mt-3 text-sm">
           {t(error)}
+        </div>
+      )}
+      {error === 'err.NAME_TAKEN' && tab === 'guest' && (
+        <div className="mt-2">
+          <NameSuggestion
+            name={name}
+            onPick={(free) => {
+              setName(free);
+              setError(null);
+            }}
+          />
         </div>
       )}
 

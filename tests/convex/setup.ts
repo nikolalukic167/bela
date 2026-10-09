@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { convexTest } from 'convex-test';
 import schema from '../../convex/schema';
+import { nameKey } from '../../convex/lib/names';
 
 const modules = import.meta.glob('../../convex/**/*.*s');
 
@@ -11,7 +12,7 @@ export type Backend = ReturnType<typeof newBackend>;
 
 /** A signed-in client for a fresh user. Convex Auth's subject is "<userId>|<sessionId>". */
 export async function signUp(t: Backend, name: string, flags: { isAdmin?: boolean; isAnonymous?: boolean } = {}) {
-  const userId = await t.run((ctx) => ctx.db.insert('users', { name, isAnonymous: true, ...flags }));
+  const userId = await t.run((ctx) => ctx.db.insert('users', { name, nameKey: nameKey(name), isAnonymous: true, ...flags }));
   return { userId, as: t.withIdentity({ subject: `${userId}|session` }) };
 }
 
