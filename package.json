@@ -34,7 +34,7 @@
     "daisyui": "^5.7.47",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "globals": "^15.15.0",
+    "globals": "^17.13.0",
     "jose": "^6.2.12",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.5.4",
