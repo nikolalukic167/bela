@@ -172,3 +172,22 @@ export function advance(state: BelaState, seats: Seat[], version: number, max: n
 export function isFinished(state: BelaState): boolean {
   return belaGame.isOver(state);
 }
+
+/**
+ * Rebuilds a game from its seed, options and action log (architecture §5), checking every
+ * move is legal where it was made. Used to verify stored games and for replays.
+ */
+export function replay(options: BelaOptions, seed: number, actions: BelaAction[]): BelaState {
+  let s = startState(options, seed);
+  for (const a of actions) {
+    const auto = belaGame.autoAction(s);
+    const seat = belaGame.currentPlayer(s);
+    const legal =
+      (auto !== null && sameAction(auto, a)) ||
+      (s.phase === 'handOver' && a.type === 'next') ||
+      (seat !== null && belaGame.legalActions(s, seat).some((l) => sameAction(l, a)));
+    if (!legal || belaGame.isOver(s)) throw new TableError('ILLEGAL_ACTION');
+    s = belaGame.apply(s, a);
+  }
+  return s;
+}

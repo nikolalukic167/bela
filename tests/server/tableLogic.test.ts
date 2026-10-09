@@ -8,6 +8,7 @@ import {
   fillWithBots,
   makeCode,
   moverOf,
+  replay,
   startState,
   type Seat,
   type ServerBotLevel,
@@ -129,5 +130,19 @@ describe('table codes', () => {
     expect(code).toHaveLength(CODE_LENGTH);
     for (const ch of code) expect(CODE_ALPHABET).toContain(ch);
     expect(CODE_ALPHABET).not.toMatch(/[01OIL]/);
+  });
+});
+
+describe('replay (architecture §5: seed + options + action log rebuild any game)', () => {
+  it('rebuilds the exact state from the seed and the logged moves', () => {
+    const seats = fillWithBots(emptySeats(), 'hard');
+    const start = startState(opts('hard'), 424242);
+    const { state, moves } = advance(start, seats, 0, 5000);
+    expect(belaGame.isOver(state)).toBe(true);
+    expect(replay(opts('hard'), 424242, moves.map((m) => m.action))).toEqual(state);
+  });
+
+  it('rejects a log containing an illegal move', () => {
+    expect(() => replay(opts('easy'), 1, [{ type: 'play', card: { suit: 'hearts', rank: 'A' } }])).toThrow(/ILLEGAL_ACTION/);
   });
 });
