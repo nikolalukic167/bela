@@ -595,7 +595,7 @@ export const history = query({
         target: t.options.target,
         scores: [t.result.scores[team], t.result.scores[1 - team]] as [number, number],
         won: t.result.winner === team,
-        players: [name((mine + 2) % 4), name((mine + 1) % 4), name((mine + 3) % 4)],
+        players: [name((mine + 2) % seats.length), name((mine + 1) % seats.length), name((mine + 3) % seats.length)],
       });
     }
     return out.sort((a, b) => b.playedAt - a.playedAt);

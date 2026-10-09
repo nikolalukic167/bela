@@ -10,6 +10,8 @@ import type { Rng } from './rng';
 export interface GameDefinition<S, A, O, V> {
   id: string;
   defaultOptions: O;
+  /** Number of seats at the table; modes (e.g. 2-, 3-, 4-player) are options, not forks. */
+  seats(opts: O): number;
   setup(opts: O, seed: number): S;
   /** Seat whose input is awaited, or null when no input is pending. */
   currentPlayer(s: S): number | null;

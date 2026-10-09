@@ -13,6 +13,8 @@ export interface BelaOptions {
   belaAlwaysCounts: boolean;
   /** Exact tie for the caller: points hang (visi) or the caller fails (pad). */
   tie: 'hangs' | 'fails';
+  /** Seats at the table. Missing (= 4) in games saved before modes existed. */
+  players?: 2 | 3 | 4;
   /** Difficulty of the bots (see bots/index.ts). Missing in games saved before levels existed. */
   botLevel?: 'easy' | 'medium' | 'hard' | 'expert';
 }

@@ -6,34 +6,44 @@ import { cardPoints } from './rules';
 import { scoreHand, settleHand } from './scoring';
 import { DEFAULT_RULES, type BelaAction, type BelaOptions, type BelaState } from './state';
 
-export const NUM_PLAYERS = 4;
 export const HUMAN_SEAT = 0;
+/** Cards dealt into the hand, then face down into the talon, per seat. */
+const HAND_SIZE = 6;
+const TALON_SIZE = 2;
+
+/** Seats at the table; games saved before modes existed have four. */
+export const seatCount = (o: Pick<BelaOptions, 'players'>): number => o.players ?? 4;
+const allSeats = (o: Pick<BelaOptions, 'players'>) => Array.from({ length: seatCount(o) }, (_, i) => i);
 
 export const teamOf = (seat: number) => seat % 2;
 
 export function nextSeat(seat: number, s: { options: BelaOptions }): number {
-  return s.options.direction === 'ccw' ? (seat + 1) % 4 : (seat + 3) % 4;
+  const n = seatCount(s.options);
+  return s.options.direction === 'ccw' ? (seat + 1) % n : (seat + n - 1) % n;
 }
 
-/** 0 for the player after the dealer, … 3 for the dealer. */
-export function playOrder(s: BelaState, seat: number): number {
+/** 0 for the player after the dealer, … n − 1 for the dealer. */
+export function playOrder(s: Pick<BelaState, 'options' | 'dealer'>, seat: number): number {
+  const n = seatCount(s.options);
   let p = nextSeat(s.dealer, s);
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < n; i++) {
     if (p === seat) return i;
     p = nextSeat(p, s);
   }
-  return 4;
+  return n;
 }
 
 /**
- * Deck order: cards 0–23 are the six-card hands (seat 0 first), 24–31 the
- * two-card talons (seat 0 first).
+ * Deck order: first the six-card hands (seat 0 first), then the two-card talons
+ * (seat 0 first). With four seats: cards 0–23 are hands, 24–31 talons.
  */
 function deal(s: BelaState, arranged?: Card[]): BelaState {
+  const seats = allSeats(s.options);
   const deck = arranged ?? shuffle(buildDeck(RANKS_32), createRng(s.seed + s.handNo * 7919));
-  if (deck.length !== 32) throw new Error('A Bela deck has 32 cards');
-  const hands = [0, 1, 2, 3].map((i) => deck.slice(i * 6, i * 6 + 6));
-  const talon = [0, 1, 2, 3].map((i) => deck.slice(24 + i * 2, 24 + i * 2 + 2));
+  if (deck.length !== seats.length * (HAND_SIZE + TALON_SIZE)) throw new Error('A Bela deck has 32 cards');
+  const handCards = seats.length * HAND_SIZE;
+  const hands = seats.map((i) => deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE));
+  const talon = seats.map((i) => deck.slice(handCards + i * TALON_SIZE, handCards + (i + 1) * TALON_SIZE));
   return {
     ...s,
     phase: 'trump',
@@ -60,6 +70,7 @@ function deal(s: BelaState, arranged?: Card[]): BelaState {
 
 /** `deck` arranges the first deal (see `deal`); later deals are shuffled from `seed`. */
 export function setup(options: BelaOptions, seed: number, deck?: Card[]): BelaState {
+  if (seatCount(options) !== 4) throw new Error(`${seatCount(options)}-player Bela is not implemented yet`);
   const base: BelaState = {
     options,
     seed,
@@ -149,7 +160,7 @@ export function apply(s: BelaState, a: BelaAction): BelaState {
       return {
         ...s,
         hands,
-        talon: [[], [], [], []],
+        talon: s.talon.map(() => []),
         trump: a.suit,
         callerSeat: s.turn,
         belaHolder: hands.findIndex(
@@ -180,7 +191,7 @@ export function apply(s: BelaState, a: BelaAction): BelaState {
       }
 
       const next = { ...s, hands, trick, belaCalled, belaSeats };
-      if (trick.length < 4) return { ...next, turn: nextSeat(seat, s) };
+      if (trick.length < seatCount(s.options)) return { ...next, turn: nextSeat(seat, s) };
       return { ...next, phase: 'collect' };
     }
 
@@ -193,7 +204,7 @@ export function apply(s: BelaState, a: BelaAction): BelaState {
       const pts = [...s.trickPoints] as [number, number];
       pts[team] += s.trick.reduce((sum, p) => sum + cardPoints(p.card, trump), 0);
       const played = [...s.played, ...s.trick.map((p) => p.card)];
-      const handDone = played.length === 32;
+      const handDone = s.hands.every((h) => h.length === 0);
 
       const after: BelaState = {
         ...s,

@@ -84,7 +84,7 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 - **`legalActions` is the validator.** The server rejects any action that is not in `legalActions(state, seat)`; the UI uses the same list for hints.
 - **`view(state, seat)` is the only thing a client ever receives.** It must exclude: other hands, unplayed talon cards, the deck seed, and the face-down state of anything not yet revealed. Declarations stay hidden until the rules reveal them.
 - **Options are data** (`BelaOptions`: target, direction, `belaAlwaysCounts`, `tie`). New house rules extend this type, get a default that preserves current behaviour, and are covered in `docs/rules/bela.md` plus a scoring test. Options are frozen when the game starts and stored with the table, so a rule change can never alter a game in progress.
-- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. Add `seats` to `GameDefinition` rather than hardcoding 4.
+- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. `GameDefinition.seats(options)` gives the seat count; Bela reads it from `BelaOptions.players` (missing = 4, so saved games and stored tables keep working). Turn order, play order, the deal, trick size, end of hand and the view follow the seat count; 4-player behaviour is unchanged and covered by the existing tests.
 - **Action log.** Online tables store `{seed, options, actions[]}` append-only. State is a cache that can be rebuilt from the log; the log is the audit trail and the replay source.
 - Ratings, stats, and achievements are computed from the **finished game record**, in separate modules. The engine knows nothing about them.
 

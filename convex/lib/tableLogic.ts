@@ -41,8 +41,8 @@ export function ownSeat(seats: Seat[], userId: Id<'users'>): number {
 export const firstEmpty = (seats: Seat[]) => seats.findIndex((s) => s.kind === 'empty');
 export const humanCount = (seats: Seat[]) => seats.filter((s) => s.kind === 'user').length;
 
-export function emptySeats(): Seat[] {
-  return Array.from({ length: SEATS }, () => ({ kind: 'empty' as const }));
+export function emptySeats(count = SEATS): Seat[] {
+  return Array.from({ length: count }, () => ({ kind: 'empty' as const }));
 }
 
 /** A bot with a name not yet used at the table. */
