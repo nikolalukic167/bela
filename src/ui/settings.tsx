@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { DECK_IDS, type DeckId } from './decks/ids';
+import { DECK_IDS, DEFAULT_DECK, type DeckId } from './decks/ids';
 import { loadJson, saveJson } from './storage';
 
 export type Speed = 'slow' | 'normal' | 'fast';
@@ -25,7 +25,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [speed, setSpeed] = useState<Speed>(() => loadJson<Speed>('speed') ?? 'normal');
   const [deck, setDeck] = useState<DeckId>(() => {
     const saved = loadJson<DeckId>('deck');
-    return saved && DECK_IDS.includes(saved) ? saved : 'french';
+    return saved && DECK_IDS.includes(saved) ? saved : DEFAULT_DECK;
   });
   useEffect(() => saveJson('speed', speed), [speed]);
   useEffect(() => saveJson('deck', deck), [deck]);
@@ -38,7 +38,7 @@ export function useSettings(): Settings {
   return ctx;
 }
 
-/** The viewer's deck; falls back to the French deck where no provider exists (tests, isolated renders). */
+/** The viewer's deck; falls back to the default deck where no provider exists (tests, isolated renders). */
 export function useDeck(): DeckId {
-  return useContext(Ctx)?.deck ?? 'french';
+  return useContext(Ctx)?.deck ?? DEFAULT_DECK;
 }
