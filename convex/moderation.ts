@@ -169,7 +169,8 @@ export const resolve = mutation({
     const admin = await requireAdmin(ctx);
     const r = await ctx.db.get(reportId);
     if (!r || r.status !== 'open') throw new TableError('WRONG_STATE');
-    if (action === 'resetName') await ctx.db.patch(r.reportedId, { name: NEUTRAL_NAME });
+    // The neutral name has no key: it frees the old name and blocks nobody.
+    if (action === 'resetName') await ctx.db.patch(r.reportedId, { name: NEUTRAL_NAME, nameKey: undefined });
     await ctx.db.patch(r._id, { status: 'resolved', resolution: action });
     await logAction(ctx, admin._id, action, r.reportedId, r._id);
   },

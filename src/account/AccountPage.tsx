@@ -10,6 +10,7 @@ import { OnlineGate } from '../online/OnlineGate';
 import { AppShell } from '../ui/AppShell';
 import { Modal } from '../ui/Modal';
 import { useAccount } from './account';
+import { NameSuggestion } from './NameSuggestion';
 
 /** The signed-in player's own settings: name, blocked and muted players, account deletion. */
 export function AccountPage() {
@@ -81,6 +82,15 @@ function RenameCard({ current }: { current: string }) {
           <div role={status.ok ? 'status' : 'alert'} className={`alert alert-soft text-sm ${status.ok ? 'alert-success' : 'alert-error'}`}>
             {t(status.key)}
           </div>
+        )}
+        {status?.key === 'err.NAME_TAKEN' && (
+          <NameSuggestion
+            name={name}
+            onPick={(free) => {
+              setName(free);
+              setStatus(null);
+            }}
+          />
         )}
       </form>
     </section>
