@@ -165,6 +165,20 @@ export default defineSchema({
     .index('by_key', ['key'])
     .index('by_at', ['at']),
 
+  // Feature flags (lib/flags.ts), switched in the admin panel. A missing row means on.
+  config: defineTable({
+    key: v.string(),
+    on: v.boolean(),
+  }).index('by_key', ['key']),
+
+  // What was created per UTC day, counted by the quota-watch cron (maintenance.countUsage).
+  usage: defineTable({
+    day: v.string(),
+    tables: v.number(),
+    actions: v.number(),
+    games: v.number(),
+  }).index('by_day', ['day']),
+
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({
     userId: v.id('users'),

@@ -40,6 +40,7 @@ function Admin() {
   const seed = useMutation(api.admin.seed);
   const clear = useMutation(api.admin.clearTestData);
   const startMatch = useMutation(api.admin.startBotMatch);
+  const setFlag = useMutation(api.admin.setFlag);
   const [level, setLevel] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [speed, setSpeed] = useState<'live' | 'fast'>('live');
   const [target, setTarget] = useState<501 | 701 | 1001>(501);
@@ -113,6 +114,62 @@ function Admin() {
             </p>
           </div>
         </section>
+
+        {overview && (
+          <section className="card bg-base-200 mb-6">
+            <div className="card-body">
+              <h2 className="card-title">Usage, last 30 days</h2>
+              {overview.usage.warn && (
+                <div role="alert" className="alert alert-warning">
+                  Estimated function calls are at {Math.round((overview.usage.estimatedCalls / overview.usage.quota) * 100)} % of the free-tier
+                  quota. See docs/operations.md.
+                </div>
+              )}
+              <div className="stats stats-vertical sm:stats-horizontal bg-base-100">
+                <div className="stat">
+                  <div className="stat-title">Tables created</div>
+                  <div className="stat-value">{overview.usage.tables}</div>
+                </div>
+                <div className="stat">
+                  <div className="stat-title">Moves stored</div>
+                  <div className="stat-value">{overview.usage.actions}</div>
+                </div>
+                <div className="stat">
+                  <div className="stat-title">Function calls (est.)</div>
+                  <div className="stat-value">{overview.usage.estimatedCalls}</div>
+                  <div className="stat-desc">of {overview.usage.quota} per month</div>
+                </div>
+              </div>
+              <p className="text-sm opacity-70">
+                Counted daily for the previous UTC day ({overview.usage.days.length} days so far). The real numbers are on the Convex
+                dashboard's Usage page.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {overview && (
+          <section className="card bg-base-200 mb-6">
+            <div className="card-body">
+              <h2 className="card-title">Feature flags</h2>
+              <div className="flex flex-wrap gap-6">
+                {(Object.keys(overview.flags) as (keyof typeof overview.flags)[]).map((name) => (
+                  <label key={name} className="label cursor-pointer gap-2">
+                    <input
+                      type="checkbox"
+                      className="toggle toggle-primary"
+                      checked={overview.flags[name]}
+                      disabled={busy}
+                      onChange={(e) => void run(`${name} ${e.target.checked ? 'on' : 'off'}`, () => setFlag({ name, on: e.target.checked }))}
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+              <p className="text-sm opacity-70">Kill switches for everyone, effective at once. ratings off: no new rated tables and no rating changes.</p>
+            </div>
+          </section>
+        )}
 
         <section className="card bg-base-200 mb-6">
           <div className="card-body">

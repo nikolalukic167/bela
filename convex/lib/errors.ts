@@ -13,6 +13,7 @@ export type TableErrorCode =
   | 'INVALID_INPUT'
   | 'RATE_LIMITED'
   | 'CODE_EXPIRED'
+  | 'FEATURE_OFF'
   | 'RATED_NEEDS_FOUR'
   | 'RATED_NEEDS_ACCOUNTS';
 

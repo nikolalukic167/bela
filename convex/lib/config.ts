@@ -59,3 +59,10 @@ export const CODE_LENGTH = 8;
 export const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Joins with an unknown code, per user: a burst of 10, then one per 30 s. */
 export const LOOKUP_LIMIT = { burst: 10, refillMs: 30_000 };
+/** Convex free plan: function calls per month (docs.convex.dev/production/state/limits, Oct 2026). */
+export const QUOTA_CALLS_PER_MONTH = 1_000_000;
+/** Warn in the admin panel (and log quota.warning) at this share of the quota (architecture §12). */
+export const QUOTA_WARN_AT = 0.7;
+/** Function calls per stored move: the mutation plus the `watch` re-runs it triggers (~2,300 per match). */
+export const CALLS_PER_ACTION = 5;
+

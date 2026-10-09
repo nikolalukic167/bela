@@ -28,6 +28,8 @@ function OnlineLobby() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const tables = useQuery(api.tables.mine, {});
+  const flags = useQuery(api.flags.list, {});
+  const ratingsOn = flags?.ratings !== false;
   const create = useMutation(api.tables.create);
   const join = useMutation(api.tables.join);
   const [creating, setCreating] = useState(false);
@@ -43,7 +45,7 @@ function OnlineLobby() {
     setError(null);
     try {
       const botLevel = o.botLevel === 'expert' ? 'hard' : o.botLevel;
-      const created = await create({ options: { ...o, botLevel }, rated, timerProfile });
+      const created = await create({ options: { ...o, botLevel }, rated: rated && ratingsOn, timerProfile });
       navigate(`/t/${created}`);
     } catch (e) {
       fail(e);
@@ -75,11 +77,13 @@ function OnlineLobby() {
           <section className="card bg-base-200 shadow-md">
             <div className="card-body">
               <h2 className="card-title">{t('online.create')}</h2>
-              <p className="opacity-70 text-sm">{t(rated ? 'online.ratedHint' : 'online.startHint')}</p>
-              <label className="label cursor-pointer gap-2">
-                <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
-                {t('online.rated')}
-              </label>
+              <p className="opacity-70 text-sm">{t(rated && ratingsOn ? 'online.ratedHint' : 'online.startHint')}</p>
+              {ratingsOn && (
+                <label className="label cursor-pointer gap-2">
+                  <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
+                  {t('online.rated')}
+                </label>
+              )}
               <label className="fieldset py-0">
                 <span className="fieldset-legend">{t('online.timer')}</span>
                 <select className="select select-sm" value={timerProfile} onChange={(e) => setTimerProfile(e.target.value as TimerProfileName)}>

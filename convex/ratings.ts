@@ -3,6 +3,8 @@ import { query, type MutationCtx } from './_generated/server';
 import { requireUser } from './lib/auth';
 import { DAILY_GAIN_CAP, DAILY_GAIN_WINDOW_MS, LEADERBOARD_MIN_AGE_MS, LEADERBOARD_MIN_GAMES, LEADERBOARD_SIZE } from './lib/config';
 import { gainsByOpponent, quartetKey, settleMatch } from './lib/ratingLogic';
+import { flagOn } from './lib/flags';
+import { logEvent } from './lib/log';
 import type { Seat } from './lib/tableLogic';
 import { DEFAULT_CONFIG, displayRating, isProvisional, newRating, type PlayerRating, type RatingBook } from '../src/ratings/ratings';
 
@@ -34,8 +36,10 @@ export async function recordGame(
     endedAt: now,
   };
   const ids = players.filter((p): p is Id<'users'> => p !== null);
-  if (!table.rated || ids.length !== 4) {
-    await ctx.db.insert('games', { ...base, rated: false });
+  // With the ratings flag off (a kill switch, architecture §12) even a rated table's result changes no rating.
+  if (!table.rated || ids.length !== 4 || !(await flagOn(ctx, 'ratings'))) {
+    const gameId = await ctx.db.insert('games', { ...base, rated: false });
+    logEvent('game.finished', { tableId: table._id, gameId, rated: false, endReason: base.endReason });
     return;
   }
 
@@ -61,6 +65,7 @@ export async function recordGame(
     gainedToday,
   });
   const gameId = await ctx.db.insert('games', { ...base, rated: settled.rated, quartetKey: key });
+  logEvent('game.finished', { tableId: table._id, gameId, rated: settled.rated, endReason: base.endReason });
   for (const [id, r] of Object.entries(settled.updates)) {
     const userId = id as Id<'users'>;
     const before = displayRating(current[id] ?? newRating());

@@ -95,7 +95,7 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | Table | Key fields | Notes |
 |---|---|---|
 | `users` | auth fields, `isAnonymous` (guest), `isAdmin`, `isBot`, `isTest`; later `country`, `city`, `locale` | Our flags are optional so Convex Auth can create users. `isAdmin` is granted only from the Convex dashboard (§15). |
-| `tables` | `code`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
+| `tables` | `code`, `codeExpiresAt`, `timerProfile`, `hostId`, `options`, `status` (lobby/playing/finished), `seats[]` (`{kind:'empty'}` \| `{kind:'user',userId,name}` \| `{kind:'bot',name,level}`), `isTest`, `speed` (live/fast), `result`, `createdAt` | `rated` arrives with ratings (phase 3); until then no game is rated. `isTest` tables are invisible to real users (§15). |
 | `tableStates` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. `version` is bumped per action; scheduled steps carry the version they expect, so a stale one is a no-op. |
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
@@ -103,6 +103,10 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt` | One row per finished non-test match, written with the rating update. |
 | `ratings` | `userId`, `mu`, `sigma`, `gamesPlayed`, `lastPlayedAt`, `display` (mu − 3σ, indexed for the board) | OpenSkill, not a single Elo number. Solo scope only; pair ratings come with phase 4. |
 | `ratingHistory` | `userId`, `gameId`, `mu`, `sigma`, `display`, `delta`, `at` | One point per player per rated game; feeds the rating graph. |
+| `retiredCodes` | `code`, `tableId` | Invite codes the host replaced; resolve only for players seated at that table (§9.3). |
+| `rateLimits` | `key`, `tokens`, `at` | Token buckets (`act:<table>:<user>`, `lookup:<user>`); idle ones are deleted daily. |
+| `config` | `key`, `on` | Feature flags (§12); a missing row means on. |
+| `usage` | `day`, `tables`, `actions`, `games` | Per-UTC-day counts from the quota-watch cron (§12). |
 | `pairs` | `userA`, `userB` (ordered), `status`, rating via `ratings` | Both must accept. Planned. |
 | `friendships`, `invites` | pair of users + status; code, expiry, uses | Invites expire and are single-purpose. Planned. |
 | `leagues`, `tournaments`, `clubs` | later phases | Added with their phase, not before. |
@@ -202,10 +206,13 @@ CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build
 
 ## 12. Observability & operations
 
-- Structured server logs with `tableId`/`gameId`, **never** hands, seeds of live games, tokens, or emails.
-- Counters to watch against the Convex free tier: function calls/month (~2,300 per match), storage. Alert at 70% of quota; the action log is compacted into `games` summaries after N days for friendlies (rated logs are kept for replay and disputes).
-- Backups: Convex snapshot export on a schedule for production.
-- Feature flags (a `config` table or env) for risky rollouts: ratings on/off, tournaments on/off.
+How-to and dashboard steps: [operations.md](operations.md).
+
+- **Structured logs** (built): `logEvent` (`convex/lib/log.ts`) writes one JSON line per key event (table created/started, code replaced, stand-in/reclaim, game finished, rate limited, flag changed, cleanup, usage, quota warning, compaction) with `tableId`/`gameId`. Its field list is closed: **never** hands, seeds of live games, state, tokens, or emails.
+- **Quota watch** (built): against the Convex free tier (1M function calls/month, 0.5 GB storage). A daily cron (`maintenance.countUsage`) counts the previous UTC day's tables and actions (paged) into `usage`; the admin panel sums 30 days, estimates calls as actions × 5 (`CALLS_PER_ACTION`; ~2,300 per match) and warns at 70% (`QUOTA_WARN_AT`), and the cron logs `quota.warning`.
+- **Action-log compaction** (built): the action log of finished **unrated** non-test tables is deleted after 30 days (`maintenance.compactLogs`); their `games` row and final state stay. Rated logs are kept for replay and disputes.
+- **Backups:** Convex snapshot export, scheduled on the Pro plan or by CLI export (`npx convex export --prod`); steps in operations.md.
+- **Feature flags** (built): rows in `config`, switched in the admin panel, missing means on: `ratings` (off: no new rated tables, no rating changes), `rematch`, `chat`. `flags.list` is public. Tournaments get a flag when they exist.
 - Cost fallback: if the free tier is exceeded, the order of reduction is turn timers → bot delay ticks → view refresh frequency; the upgrade path is Convex paid plan, not a rewrite.
 
 ## 13. Business features, without compromising the above

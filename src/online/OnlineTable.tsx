@@ -29,6 +29,7 @@ function OnlineTable({ code }: { code: string }) {
   const act = useMutation(api.tables.act);
   const leave = useMutation(api.tables.leave);
   const rematch = useMutation(api.tables.rematch);
+  const flags = useQuery(api.flags.list, {});
   const [error, setError] = useState<string | null>(null);
   useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
   // The host replaced the invite code: seated players' pages follow the table to its new code.
@@ -84,9 +85,11 @@ function OnlineTable({ code }: { code: string }) {
             if (a.type !== 'collect') void guard(() => act({ code, action: a })); // collecting is the server's job
           }}
           // "Play again" opens (or joins) the rematch at a new table with the same seating.
+          // With rematches switched off (a feature flag), "play again" goes back to the table list.
           onMatchEnd={() =>
             void guard(async () => {
-              navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
+              if (flags?.rematch === false) navigate('/online');
+              else navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
             })
           }
           gameActions={[

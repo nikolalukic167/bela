@@ -1,5 +1,6 @@
 import type { MutationCtx } from '../_generated/server';
 import { TableError } from './errors';
+import { logEvent } from './log';
 
 export interface Limit {
   /** Requests allowed back to back. */
@@ -32,7 +33,10 @@ export function takeToken(
 export async function consume(ctx: MutationCtx, key: string, limit: Limit): Promise<void> {
   const row = await ctx.db.query('rateLimits').withIndex('by_key', (q) => q.eq('key', key)).unique();
   const next = takeToken(row, Date.now(), limit);
-  if (!next.ok) throw new TableError('RATE_LIMITED');
+  if (!next.ok) {
+    logEvent('rateLimited', { bucket: key.split(':')[0] });
+    throw new TableError('RATE_LIMITED');
+  }
   if (row) await ctx.db.patch(row._id, { tokens: next.tokens, at: next.at });
   else await ctx.db.insert('rateLimits', { key, tokens: next.tokens, at: next.at });
 }

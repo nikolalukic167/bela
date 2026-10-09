@@ -18,6 +18,8 @@ import {
 } from './lib/config';
 import { TableError } from './lib/errors';
 import { consume } from './lib/rateLimit';
+import { flagOn } from './lib/flags';
+import { logEvent } from './lib/log';
 import {
   advance,
   applyHumanAction,
@@ -169,6 +171,7 @@ export const create = mutation({
   args: { options: optionsValidator, rated: v.optional(v.boolean()), timerProfile: v.optional(timerProfileValidator) },
   handler: async (ctx, { options, rated, timerProfile }) => {
     const user = await requireUser(ctx);
+    if (rated && !(await flagOn(ctx, 'ratings'))) throw new TableError('FEATURE_OFF');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
     const seats = emptySeats();
     seats[0] = { kind: 'user', userId: user._id, name: user.name ?? 'Igrač' };
@@ -187,6 +190,7 @@ export const create = mutation({
       codeExpiresAt: Date.now() + INVITE_TTL_MS,
     });
     await ctx.db.insert('memberships', { userId: user._id, tableId });
+    logEvent('table.created', { tableId, rated: rated === true, timerProfile: timerProfile ?? 'normal' });
     return code;
   },
 });
@@ -269,6 +273,7 @@ export const newCode = mutation({
     const next = await uniqueCode(ctx);
     await ctx.db.insert('retiredCodes', { code: table.code, tableId: table._id });
     await ctx.db.patch(table._id, { code: next, codeExpiresAt: Date.now() + INVITE_TTL_MS });
+    logEvent('table.codeReplaced', { tableId: table._id });
     return next;
   },
 });
@@ -345,6 +350,7 @@ export const start = mutation({
     const rowId = await ctx.db.insert('tableStates', { tableId: table._id, state, version: 0 });
     const row = (await ctx.db.get(rowId))!;
     for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table, s.userId);
+    logEvent('table.started', { tableId: table._id, rated: table.rated === true, count: seats.filter((s) => s.kind === 'user').length });
     await scheduleNext(ctx, { ...table, seats, status: 'playing' } as Doc<'tables'>, row);
   },
 });
@@ -385,6 +391,7 @@ export const heartbeat = mutation({
     const back = reclaimSeat(table.seats as Seat[], user._id);
     if (back) {
       await ctx.db.patch(table._id, { seats: back.seats });
+      logEvent('seat.reclaimed', { tableId: table._id, seat: back.seat });
       // A table that waited for its players moves again; a pending stand-in step for this seat becomes a no-op.
       await scheduleNext(ctx, { ...table, seats: back.seats } as Doc<'tables'>, await loadState(ctx, table._id));
     } else if (seatOf(table.seats as Seat[], user._id) < 0) {
@@ -421,6 +428,7 @@ export const checkPresence = internalMutation({
     }
     const seats = standIn(table.seats as Seat[], seat, botLevelOf(table));
     await ctx.db.patch(table._id, { seats });
+    logEvent('seat.standIn', { tableId: table._id, seat });
     await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, await loadState(ctx, table._id));
   },
 });
@@ -449,6 +457,7 @@ export const rematch = mutation({
     if (!table) throw new TableError('NOT_FOUND');
     if (ownSeat(table.seats as Seat[], user._id) < 0) throw new TableError('FORBIDDEN');
     if (table.status !== 'finished') throw new TableError('WRONG_STATE');
+    if (!(await flagOn(ctx, 'rematch'))) throw new TableError('FEATURE_OFF');
     if (table.rematchCode) {
       const existing = await findTable(ctx, table.rematchCode, user);
       if (existing) return existing.code;
@@ -495,12 +504,15 @@ export const cleanup = internalMutation({
       .take(200);
     // Token buckets idle for a day are full again anyway.
     for (const r of await ctx.db.query('rateLimits').withIndex('by_at', (q) => q.lte('at', now - STALE_TABLE_MS)).take(500)) await ctx.db.delete(r._id);
+    let deleted = 0;
     for (const t of [...lobbies, ...running]) {
       const row = t.status === 'playing' ? await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', t._id)).unique() : null;
       if (isAbandoned({ status: t.status, seats: t.seats as Seat[], createdAt: t.createdAt, lastMoveAt: row?.lastMoveAt ?? null }, now)) {
         await deleteTable(ctx, t._id);
+        deleted++;
       }
     }
+    logEvent('cleanup.done', { count: deleted });
   },
 });
 
