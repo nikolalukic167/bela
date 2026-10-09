@@ -15,9 +15,9 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 
 | # | Phase | Delivers | Depends on | Status |
 |---|---|---|---|---|
-| 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | mostly done (`src/games/bela`) |
+| 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | **done** (`src/games/bela`; tutorial in `tutorial.ts` + `ui/BelaTutorial.tsx`) |
 | 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **done** (see §15): accounts, private tables, server-side bots, admin tools, reconnect, turn timers, rematch, cleanup, e2e |
-| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **mostly done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph; personal stats page open |
+| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph, personal stats page (`/stats`) |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
 | 5 | **Competitive** | Seasons/leagues, tournaments (round-robin, brackets), clubs, replays, achievements | 3, 4 | |
 | 6 | **Extras** | Cosmetics, premium analytics, sponsored tournaments, other games (Briškula, Trešeta), physical-table scorekeeper | 3 | |
@@ -84,7 +84,7 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 - **`legalActions` is the validator.** The server rejects any action that is not in `legalActions(state, seat)`; the UI uses the same list for hints.
 - **`view(state, seat)` is the only thing a client ever receives.** It must exclude: other hands, unplayed talon cards, the deck seed, and the face-down state of anything not yet revealed. Declarations stay hidden until the rules reveal them.
 - **Options are data** (`BelaOptions`: target, direction, `belaAlwaysCounts`, `tie`). New house rules extend this type, get a default that preserves current behaviour, and are covered in `docs/rules/bela.md` plus a scoring test. Options are frozen when the game starts and stored with the table, so a rule change can never alter a game in progress.
-- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. Add `seats` to `GameDefinition` rather than hardcoding 4. Only 4-player is built; 2- and 3-player stay a spec for now (§14.9).
+- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. `GameDefinition.seats(options)` gives the seat count; Bela reads it from `BelaOptions.players` (missing = 4, so saved games and stored tables keep working). Turn order, play order, the deal, trick size, end of hand and the view follow the seat count; 4-player behaviour is unchanged and covered by the existing tests. Only 4-player is built: 2 and 3 seats are refused until their rule questions are settled, and they are not planned for now (§14.9).
 - **Action log.** Online tables store `{seed, options, actions[]}` append-only. State is a cache that can be rebuilt from the log; the log is the audit trail and the replay source.
 - Ratings, stats, and achievements are computed from the **finished game record**, in separate modules. The engine knows nothing about them.
 
@@ -100,9 +100,10 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: eve
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
 | `presence` | `tableId`, `userId`, `lastSeen` | Last heartbeat per human at a running table. Separate from `tables` so heartbeats don't re-run every `watch` query. |
-| `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt` | One row per finished non-test match, written with the rating update. |
+| `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt`, `hands` (per scored hand: `callerSeat`, `fell`, `score`) | One row per finished non-test match, written with the rating update. `hands` feeds personal stats; rows from before it was added don't have it. |
 | `ratings` | `userId`, `mu`, `sigma`, `gamesPlayed`, `lastPlayedAt`, `display` (mu − 3σ, indexed for the board) | OpenSkill, not a single Elo number. Solo scope only; pair ratings come with phase 4. |
 | `ratingHistory` | `userId`, `gameId`, `mu`, `sigma`, `display`, `delta`, `at` | One point per player per rated game; feeds the rating graph. |
+| `chat` | `tableId`, `userId`, `seat`, `name`, `phrase` \| `text`, `at`, `expiresAt` | Quick phrase key, or lobby-only free text. Hidden after 10 min (`CHAT_TTL_MS`), deleted by an hourly purge. |
 | `blocks`, `mutes` | `userId` + `blockedId` / `mutedId` | Block keeps both sides off each other's tables; mute is private to the muter (§9.4). |
 | `reports` | `reporterId`, `reportedId`, `reason` (name/abuse/cheating/other), `tableCode`, `status`, `resolution` | Reviewed in `/admin`. Fixed reasons, no free text. |
 | `moderationLog` | `actorId`, `action` (report/block/unblock/dismiss/resetName), `targetId`, `reportId`, `at` | Append-only. Ids only, no names. |
@@ -135,13 +136,15 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 
 ## 8. Client design
 
-- Two adapters behind one hook interface: `useGame` (local, runs the engine in the browser) and `useOnlineGame` (subscribes to `tables.myView`, sends `tables.act`). The table components consume `{view, legalActions, act}` and don't know which is in use.
+- Two adapters behind one interface, `GamePort` (`src/ui/gamePort.ts`): `useGame` (local, runs the engine in the browser) and `useOnlineGame` (`src/online/`, subscribes to `tables.watch`, sends `tables.act`, and owns the heartbeat and the turn countdown). `TableScreen` consumes `{view, legalActions, act, secondsLeft?}` and doesn't know which is in use; the pure decisions behind the online adapter are in `src/online/onlineGame.ts`.
 - UI components are presentational; game logic stays in `games/*`. No rules in JSX.
 - State: local React state + Convex reactive queries. No global store until a concrete need appears.
 - Optimistic UI only for harmless things (selecting a card). Moves wait for the server.
 - i18n: every string through `i18n`; Croatian and English required for every new feature; plural/format helpers, no concatenated sentences. Card deck styles (French, Hungarian, Dalmatian-style) are theme data, not branches in components.
-- Accessibility: keyboard play, visible focus, not colour-only suit cues, `prefers-reduced-motion` respected.
+- Accessibility: keyboard play, visible focus, not colour-only suit cues, `prefers-reduced-motion` respected. In practice: cards, the trump picker, dialogs and the menu are real buttons; the trump picker and dialogs take focus when they open, focus returns to the hand when the turn comes back (←/→ move between playable cards), and the menu closes on Escape. Suits are told apart by glyph shape (or Hungarian emblem) and every card has a text label, so colour is never the only cue. Under `prefers-reduced-motion` all animations and transitions are cut to ~0. `e2e/a11y.spec.ts` runs axe (WCAG 2.1 A/AA) on home, table, tutorial, online lobby, table lobby, menu, rules, history and leaderboard, and plays the tutorial with the keyboard only.
+- Tutorial (`/tutorial`): one guided hand against easy bots on a fixed deal (`TUTORIAL_DECK`). The learner's trump call is scripted (only hearts is legal) so the talon brings a 50 sequence and bela as the tips promise; tips for trump calling, leading, following suit, declarations and scoring come from the pure `tutorialTip(view)`.
 - Chat during rated play: **emotes/quick phrases only**, no free text (partners must not share hands). Free chat only in the lobby and unrated friendlies, off by default for rated tables.
+  Built (`convex/chat.ts`, pure rules in `convex/lib/chatLogic.ts`): a fixed list of phrase keys (`QUICK_PHRASES`, none about cards), translated on the client, usable any time; free text (≤ 120 chars, no control characters) only in the **lobby of an unrated table**, so never during a game and never at a rated table. Members only (send and read), 5 messages per 10 s per player (`CHAT_TOO_FAST`), entries expire after 10 min. In game a navbar button opens the phrases and new messages show briefly under the navbar; the table lobby has a small chat box. The `chat` feature flag (§12) switches it off: `send` answers `FEATURE_OFF`, `list` returns nothing and the UI hides it. Muted players (`moderation.mute`, §9.4) disappear from the muter's chat only (`mutedBy` in `convex/lib/chatPolicy.ts`); the sender is never stopped.
 
 ## 9. Security
 
@@ -206,7 +209,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 | View leakage | Vitest | See 9.1. Release gate. |
 | Server | `convex-test` (in `tests/convex`) | Not-your-turn, illegal action, wrong seat, double-submit, stale version, reconnect/abandon timers, rating update atomicity, authorisation for host-only actions. |
 | Ratings | Vitest | Known OpenSkill cases; bot/unrated games change nothing; abandon handling. |
-| E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. |
+| E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. Accessibility: axe on every main screen, keyboard-only tutorial hand, reduced motion. |
 | UI | Vitest + Testing Library (sparingly) | Language switch, legal-card hints, accessibility smoke. |
 
 CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build → `npm audit` (prod, high), and an **e2e** job: `npm run e2e` starts a throwaway local Convex backend (`CONVEX_AGENT_MODE=anonymous`, no account or secrets), builds against it and runs Playwright (`e2e/`): two browser contexts create, join and play a table and reconnect; a player renames, blocks and reports another, then deletes their account (`e2e/account.spec.ts`); local play on desktop and phone; console errors (incl. CSP violations) fail the test. `deploy.yml` (on `main`) lints, tests and deploys Pages + Convex. Actions are pinned to commit SHAs; Dependabot updates npm and actions weekly. A red check blocks merge.
@@ -233,14 +236,14 @@ How-to and dashboard steps: [operations.md](operations.md).
 Settled with the product owner (October 2026); the sections named carry the details.
 
 1. **Display names are unique** ignoring case and spacing (built, §9.4). **Google names are not filtered**: the offensive-name filter applies to names people type; a Google name that is taken gets the first free variant. The deleted-player name stays Croatian.
-2. **Local games against bots count separately in personal stats**: they never mix with online results and are never rated.
+2. **Local games against bots count separately in personal stats**: they never mix with online results and are never rated; `/stats` shows them in their own labelled section.
 3. **Timers** (§7): profiles relaxed 120 / 60 / 40 s, **normal 60 / 30 / 20 s (the default for every table)**, quick 30 / 15 / 10 s (reconnect grace / per move / hand summary). The host picks one per table; no per-mode defaults.
 4. **Rating abuse** (§7, §9.1): at most **4 display points gained off any one opponent per day**; the leaderboard needs 10 rated matches and an **account at least 1 day old**.
 5. **Rated status is frozen at table creation** (§1.6): nothing switches it during a match. The `ratings` flag only stops new rated tables; rated matches already running are rated when they finish.
 6. **Pair rating does not feed solo ratings**: pairs (phase 4) get their own rating only.
 7. **Regions are not built**: no country/city/club fields or regional boards for now.
 8. **The public lobby is open** (§7): hosts can list a table; there is no matchmaking or minimum-player threshold.
-9. **2- and 3-player modes are not built for now**: the engine contract keeps the spec (§5), the product ships 4-player Bela only.
+9. **2- and 3-player modes are not built for now**: the engine has the seat count (§5) but refuses 2 and 3 seats; their rule questions stay listed in [rules/bela.md](rules/bela.md#open-questions-need-a-decision-before-implementing) for if they are ever built. The product ships 4-player Bela only.
 
 Open: none at the moment. New ones go here, and settled ones get a line above (or an ADR when they change the architecture).
 
@@ -263,4 +266,6 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 
 **Reconnect** is built (§7): heartbeats, a grace period from the table's timer profile (60 s on normal), stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
 
-**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: personal stats page.
+**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11).
+
+**Personal stats** (`/stats`, `convex/stats.ts`, pure `src/games/bela/stats.ts`): matches, win rate, average match points; from the hand records, how often the player calls trump, how often their call falls (pad) and points per hand; results per human partner (`partnerStats`); the rating graph from History. Local games against bots (from the device's history) are a separate, labelled section.

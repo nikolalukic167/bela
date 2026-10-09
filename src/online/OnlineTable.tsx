@@ -3,13 +3,13 @@ import { ConvexError } from 'convex/values';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
-import { HEARTBEAT_MS, TIMER_PROFILES } from '../../convex/lib/config';
-import type { BelaAction } from '../games/bela/state';
+import { TIMER_PROFILES } from '../../convex/lib/config';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
-import { errorKey } from './errors';
 import { OnlineGate } from './OnlineGate';
+import { GameChat, LobbyChat } from './TableChat';
+import { useOnlineGame, type Watched } from './useOnlineGame';
 import { PlayersDialog } from './PlayersDialog';
 
 export function OnlineTablePage() {
@@ -21,33 +21,20 @@ export function OnlineTablePage() {
   );
 }
 
-type Watched = NonNullable<ReturnType<typeof useQuery<typeof api.tables.watch>>>;
-
 function OnlineTable({ code }: { code: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const data = useQuery(api.tables.watch, { code });
-  const act = useMutation(api.tables.act);
+  const game = useOnlineGame(code);
+  const { table: data, error, guard } = game;
   const leave = useMutation(api.tables.leave);
   const rematch = useMutation(api.tables.rematch);
   const flags = useQuery(api.flags.list, {});
-  const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState(false);
-  useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
   // The host replaced the invite code: seated players' pages follow the table to its new code.
   const moved = data && data.code !== code ? data.code : null;
   useEffect(() => {
     if (moved) navigate(`/t/${moved}`, { replace: true });
   }, [moved, navigate]);
-
-  const guard = async (fn: () => Promise<unknown>) => {
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(t(errorKey(e)));
-    }
-  };
 
   if (data === undefined) {
     return (
@@ -71,7 +58,7 @@ function OnlineTable({ code }: { code: string }) {
     );
   }
 
-  if (data.view) {
+  if (game.view) {
     const names = data.seats.map((s) => (s.away ? `${s.name} (${t('online.awayShort')})` : s.name));
     const leaveGame = () => window.confirm(t('online.leaveRunning')) && guard(async () => {
       await leave({ code });
@@ -80,12 +67,10 @@ function OnlineTable({ code }: { code: string }) {
     return (
       <>
         <TableScreen
-          view={data.view}
+          game={{ ...game, view: game.view }}
           names={names}
           spectating={data.spectating}
-          onAct={(a: BelaAction) => {
-            if (a.type !== 'collect') void guard(() => act({ code, action: a })); // collecting is the server's job
-          }}
+          toolbar={data.mySeat !== null && flags?.chat !== false && <GameChat code={code} />}
           // "Play again" opens (or joins) the rematch at a new table with the same seating.
           // With rematches switched off (a feature flag), "play again" goes back to the table list.
           onMatchEnd={() =>
@@ -101,7 +86,6 @@ function OnlineTable({ code }: { code: string }) {
           ]}
         />
         {players && <PlayersDialog code={code} seats={data.seats} onClose={() => setPlayers(false)} />}
-        {data.deadline !== null && (data.view.isMyTurn || data.view.phase === 'handOver') && <TurnCountdown deadline={data.deadline} />}
         {data.spectating && <div className="toast toast-top toast-center"><div className="alert alert-info">{t('online.spectating')}</div></div>}
         {error && <div className="toast toast-top toast-center"><div role="alert" className="alert alert-error">{error}</div></div>}
       </>
@@ -110,47 +94,6 @@ function OnlineTable({ code }: { code: string }) {
 
   return <TableLobby data={data} code={code} error={error} guard={guard} />;
 }
-
-/**
- * Tells the server this player is still at the table. After the reconnect grace period
- * without one, a bot stands in; the first heartbeat after returning takes the seat back.
- */
-function useHeartbeat(code: string, active: boolean) {
-  const heartbeat = useMutation(api.tables.heartbeat);
-  useEffect(() => {
-    if (!active) return;
-    const beat = () => void heartbeat({ code }).catch(() => {}); // a missed beat is harmless: the next one retries
-    beat();
-    const id = window.setInterval(beat, HEARTBEAT_MS);
-    const onVisible = () => document.visibilityState === 'visible' && beat();
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [code, active, heartbeat]);
-}
-
-/** Shown for the last seconds of this player's turn timer; at zero the server moves for them. */
-function TurnCountdown({ deadline }: { deadline: number }) {
-  const { t } = useI18n();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const left = Math.max(0, Math.ceil((deadline - now) / 1000));
-  if (left > COUNTDOWN_FROM_S) return null;
-  return (
-    <div className="pointer-events-none fixed top-16 left-1/2 z-30 -translate-x-1/2" role="timer" aria-live="polite">
-      <span className={`badge badge-lg ${left <= 5 ? 'badge-error' : 'badge-warning'}`}>
-        {t('online.timeLeft')}: {left} s
-      </span>
-    </div>
-  );
-}
-
-const COUNTDOWN_FROM_S = 20;
 
 function TableLobby({ data, code, error, guard }: { data: Watched; code: string; error: string | null; guard: (fn: () => Promise<unknown>) => Promise<void> }) {
   const { t } = useI18n();
@@ -161,6 +104,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
   const clearSeat = useMutation(api.tables.clearSeat);
   const start = useMutation(api.tables.start);
   const newCode = useMutation(api.tables.newCode);
+  const chatOn = useQuery(api.flags.list, {})?.chat !== false;
   const [copied, setCopied] = useState<string | null>(null);
   const [players, setPlayers] = useState(false);
   const lobby = data.status === 'lobby';
@@ -329,6 +273,11 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
         {players && <PlayersDialog code={code} seats={data.seats} onClose={() => setPlayers(false)} />}
         {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t(data.rated ? 'online.ratedHint' : 'online.startHint')}</p>}
         {!lobby && !seated && <p className="text-sm opacity-70 mt-3">{t('online.watching')}</p>}
+        {seated && chatOn && (
+          <div className="mt-6">
+            <LobbyChat code={code} rated={data.rated} />
+          </div>
+        )}
       </main>
     </AppShell>
   );

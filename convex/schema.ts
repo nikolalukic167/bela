@@ -132,6 +132,8 @@ export default defineSchema({
     /** Sorted user ids of a rated four, for the quartet cap. */
     quartetKey: v.optional(v.string()),
     endedAt: v.number(),
+    /** Per scored hand: who called trump, whether it fell, what each team wrote (personal stats). */
+    hands: v.optional(v.array(v.object({ callerSeat: v.number(), fell: v.boolean(), score: v.array(v.number()) }))),
   })
     .index('by_table', ['tableId'])
     .index('by_quartet', ['quartetKey', 'endedAt']),
@@ -160,6 +162,21 @@ export default defineSchema({
     delta: v.number(),
     at: v.number(),
   }).index('by_user', ['userId', 'at']),
+
+  // Table chat (architecture §8): a phrase key, or lobby-only free text. Entries expire.
+  chat: defineTable({
+    tableId: v.id('tables'),
+    userId: v.id('users'),
+    seat: v.number(),
+    name: v.string(),
+    phrase: v.optional(v.string()),
+    text: v.optional(v.string()),
+    at: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_table', ['tableId', 'at'])
+    .index('by_table_user', ['tableId', 'userId', 'at'])
+    .index('by_expiry', ['expiresAt']),
 
   // Codes the host revoked (`tables.newCode`). Seated players' pages still resolve them; nobody else does.
   retiredCodes: defineTable({

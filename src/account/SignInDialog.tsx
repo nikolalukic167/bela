@@ -104,7 +104,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               autoFocus
               onChange={(e) => setUsername(e.target.value)}
             />
-            <span className="label">{t('auth.usernameHint')}</span>
+            <span className="label text-base-content/80">{t('auth.usernameHint')}</span>
           </label>
           <label className="fieldset">
             <span className="fieldset-legend">{t('auth.password')}</span>
@@ -115,7 +115,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               autoComplete={flow === 'signIn' ? 'current-password' : 'new-password'}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {flow === 'signUp' && <span className="label">{t('auth.passwordHint')}</span>}
+            {flow === 'signUp' && <span className="label text-base-content/80">{t('auth.passwordHint')}</span>}
           </label>
           <button type="submit" className="btn btn-primary" disabled={busy}>
             {t(flow === 'signIn' ? 'auth.signIn' : 'auth.signUp')}

@@ -1,3 +1,7 @@
+import { HUMAN_SEAT } from './engine';
+import type { HandResult } from './state';
+import { handLines, seatHands, type SeatHands } from './stats';
+
 /** One finished match, as shown in the player's history. Scores are [our team, their team]. */
 export interface HistoryEntry {
   id: string;
@@ -8,6 +12,8 @@ export interface HistoryEntry {
   won: boolean;
   /** Everyone else at the table: partner first, then the opponents. */
   players: string[];
+  /** The player's hand stats (local matches saved since they were recorded). */
+  hands?: SeatHands;
 }
 
 export function summarize(entries: HistoryEntry[]): { played: number; won: number; rate: number | null } {
@@ -29,6 +35,7 @@ interface FinishedLocalMatch {
   scores: [number, number];
   winner: number | null;
   options: { target: number };
+  history?: HandResult[];
 }
 
 /** The id is derived from the result, so reloading the finished screen records nothing new. */
@@ -41,5 +48,6 @@ export function recordLocal(m: FinishedLocalMatch, now: number): HistoryEntry {
     scores: [m.scores[0], m.scores[1]],
     won: m.winner === 0,
     players: [],
+    ...(m.history && { hands: seatHands(handLines(m.history), HUMAN_SEAT) }),
   };
 }

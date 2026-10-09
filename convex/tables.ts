@@ -50,6 +50,7 @@ import { viewFor } from '../src/games/bela/view';
 import { recordGame } from './ratings';
 import { ratedBlocker } from './lib/ratingLogic';
 import { belaGame } from '../src/games/bela/game';
+import { handLines } from '../src/games/bela/stats';
 import { blockedBetween, blockedWith } from './lib/blocks';
 
 const actionValidator = v.union(
@@ -151,7 +152,7 @@ export async function commit(
   if (isFinished(state)) {
     const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (state.winner === 1 ? 1 : 0) as 0 | 1 };
     await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
-    await recordGame(ctx, table, result);
+    await recordGame(ctx, table, result, handLines(state.history));
     return;
   }
   await scheduleNext(ctx, table, next);
@@ -463,7 +464,7 @@ async function abandon(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users
   const seat = ownSeat(table.seats as Seat[], userId);
   const result = { scores: [state.scores[0], state.scores[1]] as [number, number], winner: (seat % 2 === 0 ? 1 : 0) as 0 | 1 };
   await ctx.db.patch(table._id, { status: 'finished', result, finishedAt: Date.now() });
-  await recordGame(ctx, table, { ...result, abandonedBy: userId });
+  await recordGame(ctx, table, { ...result, abandonedBy: userId }, handLines(state.history));
 }
 
 /**
@@ -735,7 +736,7 @@ export const history = query({
         target: t.options.target,
         scores: [t.result.scores[team], t.result.scores[1 - team]] as [number, number],
         won: t.result.winner === team,
-        players: [name((mine + 2) % 4), name((mine + 1) % 4), name((mine + 3) % 4)],
+        players: [name((mine + 2) % seats.length), name((mine + 1) % seats.length), name((mine + 3) % seats.length)],
       });
     }
     return out.sort((a, b) => b.playedAt - a.playedAt);
