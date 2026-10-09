@@ -10,9 +10,12 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_chatLogic from "../lib/chatLogic.js";
+import type * as lib_chatPolicy from "../lib/chatPolicy.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_ratingLogic from "../lib/ratingLogic.js";
@@ -30,9 +33,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  chat: typeof chat;
   crons: typeof crons;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/chatLogic": typeof lib_chatLogic;
+  "lib/chatPolicy": typeof lib_chatPolicy;
   "lib/config": typeof lib_config;
   "lib/errors": typeof lib_errors;
   "lib/ratingLogic": typeof lib_ratingLogic;

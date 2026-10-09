@@ -117,10 +117,12 @@ interface ScreenProps {
   coach?: ReactNode;
   /** Label of the hand summary's "next" button. */
   nextLabel?: string;
+  /** Extra controls in the navbar next to the score (e.g. online quick messages). */
+  toolbar?: ReactNode;
 }
 
 /** Navbar score, felt table, score sheet and hand summary: shared by local and online play. */
-export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating, coach, nextLabel }: ScreenProps) {
+export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating, coach, nextLabel, toolbar }: ScreenProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [showSheet, setShowSheet] = useState(false);
@@ -134,7 +136,7 @@ export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectat
 
   return (
     <SeatNames.Provider value={names ?? null}>
-      <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
+      <AppShell fixed gameActions={actions} center={<ScoreBar view={view} toolbar={toolbar} />}>
         {view.phase !== 'handOver' && view.phase !== 'matchOver' && coach}
         <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
           <Table view={view} legal={spectating ? [] : game.legalActions} onAct={spectating ? () => undefined : onAct} />
@@ -173,7 +175,7 @@ export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectat
   );
 }
 
-function ScoreBar({ view }: { view: SeatView }) {
+function ScoreBar({ view, toolbar }: { view: SeatView; toolbar?: ReactNode }) {
   const { t } = useI18n();
   const tile = (label: string, score: number) => (
     <div className="flex min-w-14 flex-col items-center rounded-xl bg-base-200 px-3 py-0.5 leading-tight">
@@ -187,6 +189,7 @@ function ScoreBar({ view }: { view: SeatView }) {
         {tile(t('team.us'), view.scores[0])}
         {tile(t('team.them'), view.scores[1])}
       </div>
+      {toolbar && <div className="flex items-center">{toolbar}</div>}
       {view.trump && (
         <div className="lg:hidden">
           <TrumpTile view={view} />

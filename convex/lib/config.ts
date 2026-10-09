@@ -24,3 +24,12 @@ export const MIN_NAME_LENGTH = 2;
 /** Unambiguous characters only (no 0/O, 1/I/L). */
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 6;
+/** Chat (architecture §8): entries disappear after this; a purge deletes them. */
+export const CHAT_TTL_MS = 10 * 60 * 1000;
+/** At most this many messages per player per table within the window. */
+export const CHAT_BURST = 5;
+export const CHAT_WINDOW_MS = 10_000;
+/** Lobby free text, in characters. */
+export const CHAT_TEXT_MAX = 120;
+/** Messages a table's chat query returns, newest last. */
+export const CHAT_LIST_SIZE = 30;

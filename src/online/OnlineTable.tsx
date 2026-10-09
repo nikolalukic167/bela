@@ -6,6 +6,7 @@ import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
 import { OnlineGate } from './OnlineGate';
+import { GameChat, LobbyChat } from './TableChat';
 import { useOnlineGame, type Watched } from './useOnlineGame';
 
 export function OnlineTablePage() {
@@ -59,6 +60,7 @@ function OnlineTable({ code }: { code: string }) {
           game={{ ...game, view: game.view }}
           names={names}
           spectating={data.spectating}
+          toolbar={data.mySeat !== null && <GameChat code={code} />}
           // "Play again" opens (or joins) the rematch at a new table with the same seating.
           onMatchEnd={() =>
             void guard(async () => {
@@ -228,6 +230,11 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
         </div>
         {lobby && data.isHost && <p className="text-sm opacity-70 mt-3">{t(data.rated ? 'online.ratedHint' : 'online.startHint')}</p>}
         {!lobby && !seated && <p className="text-sm opacity-70 mt-3">{t('online.watching')}</p>}
+        {seated && (
+          <div className="mt-6">
+            <LobbyChat code={code} rated={data.rated} />
+          </div>
+        )}
       </main>
     </AppShell>
   );

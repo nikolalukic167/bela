@@ -142,6 +142,21 @@ export default defineSchema({
     at: v.number(),
   }).index('by_user', ['userId', 'at']),
 
+  // Table chat (architecture §8): a phrase key, or lobby-only free text. Entries expire.
+  chat: defineTable({
+    tableId: v.id('tables'),
+    userId: v.id('users'),
+    seat: v.number(),
+    name: v.string(),
+    phrase: v.optional(v.string()),
+    text: v.optional(v.string()),
+    at: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_table', ['tableId', 'at'])
+    .index('by_table_user', ['tableId', 'userId', 'at'])
+    .index('by_expiry', ['expiresAt']),
+
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({
     userId: v.id('users'),

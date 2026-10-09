@@ -13,7 +13,8 @@ export type TableErrorCode =
   | 'INVALID_INPUT'
   | 'RATE_LIMITED'
   | 'RATED_NEEDS_FOUR'
-  | 'RATED_NEEDS_ACCOUNTS';
+  | 'RATED_NEEDS_ACCOUNTS'
+  | 'CHAT_TOO_FAST';
 
 export class TableError extends ConvexError<{ code: TableErrorCode }> {
   constructor(code: TableErrorCode) {
