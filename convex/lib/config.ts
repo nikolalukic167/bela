@@ -37,4 +37,9 @@ export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;
 /** Unambiguous characters only (no 0/O, 1/I/L). */
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-export const CODE_LENGTH = 6;
+/** 31^8 ≈ 8.5·10¹¹ codes: not guessable at LOOKUP_LIMIT's pace (§9.3). Tables from before this kept 6. */
+export const CODE_LENGTH = 8;
+/** How long an invite code admits new players (seated players can always come back). */
+export const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Joins with an unknown code, per user: a burst of 10, then one per 30 s. */
+export const LOOKUP_LIMIT = { burst: 10, refillMs: 30_000 };

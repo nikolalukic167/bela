@@ -2,6 +2,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
+import { CODE_LENGTH } from '../../convex/lib/config';
 import { belaGame } from '../games/bela/game';
 import { NewGameDialog } from '../games/bela/ui/NewGameDialog';
 import type { BelaOptions } from '../games/bela/state';
@@ -51,7 +52,9 @@ function OnlineLobby() {
     e.preventDefault();
     setError(null);
     try {
-      navigate(`/t/${await join({ code })}`);
+      const found = await join({ code });
+      if (found === null) setError(t('err.NOT_FOUND'));
+      else navigate(`/t/${found}`);
     } catch (err) {
       fail(err);
     }
@@ -90,7 +93,7 @@ function OnlineLobby() {
                 aria-label={t('online.codeLabel')}
                 placeholder={t('online.codeLabel')}
                 value={code}
-                maxLength={6}
+                maxLength={CODE_LENGTH}
                 autoCapitalize="characters"
                 onChange={(e) => setCode(e.target.value)}
               />

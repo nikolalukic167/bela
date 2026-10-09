@@ -214,6 +214,10 @@ const hr = {
   'rating.mine': 'Tvoj rejting',
   'rating.provisional': 'privremeno',
   'rating.games': 'rangiranih partija',
+  'err.CODE_EXPIRED': 'Ova pozivnica je istekla. Zatraži novu šifru od domaćina.',
+  'online.newCode': 'Nova šifra',
+  'online.newCodeConfirm': 'Stara šifra i poveznica prestat će vrijediti. Igrači koji već sjede ostaju za stolom. Nastaviti?',
+  'online.codeExpired': 'Šifra je istekla i više ne prima nove igrače. Napravi novu.',
   'err.generic': 'Nešto je pošlo po zlu. Pokušaj ponovno.',
 };
 
@@ -431,6 +435,10 @@ const en: Record<keyof typeof hr, string> = {
   'rating.mine': 'Your rating',
   'rating.provisional': 'provisional',
   'rating.games': 'rated matches',
+  'err.CODE_EXPIRED': 'This invite has expired. Ask the host for a new code.',
+  'online.newCode': 'New code',
+  'online.newCodeConfirm': 'The old code and link will stop working. Players already seated stay at the table. Continue?',
+  'online.codeExpired': 'The code has expired and no longer admits new players. Make a new one.',
   'err.generic': 'Something went wrong. Please try again.',
 };
 

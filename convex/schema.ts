@@ -67,6 +67,8 @@ export default defineSchema({
     rematchCode: v.optional(v.string()),
     /** Set at creation and never changed (architecture §1.6): four account holders, results rated. */
     rated: v.optional(v.boolean()),
+    /** The invite code admits new players until then (§9.3). Absent on tables from before codes expired. */
+    codeExpiresAt: v.optional(v.number()),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])
@@ -141,6 +143,14 @@ export default defineSchema({
     delta: v.number(),
     at: v.number(),
   }).index('by_user', ['userId', 'at']),
+
+  // Codes the host revoked (`tables.newCode`). Seated players' pages still resolve them; nobody else does.
+  retiredCodes: defineTable({
+    code: v.string(),
+    tableId: v.id('tables'),
+  })
+    .index('by_code', ['code'])
+    .index('by_table', ['tableId']),
 
   // Token buckets (lib/rateLimit.ts), keyed e.g. `act:<tableId>:<userId>`. The daily cleanup drops idle ones.
   rateLimits: defineTable({

@@ -155,7 +155,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 ### 9.3 Input & data
 - Every function declares `args` with `v.*` validators, with length and range limits (display name ≤ 24 chars, trimmed, no control chars). Engine actions are additionally checked against `legalActions`.
 - Never trust client-provided IDs for ownership; look up and compare.
-- Invite codes: 8+ chars from a non-guessable alphabet (CSPRNG), expire (e.g. 24 h), rate-limited lookups, revocable by host.
+- Invite codes (built): 8 chars from the unambiguous alphabet via `crypto.getRandomValues` (31⁸ ≈ 8.5·10¹¹ codes). A code admits new players for 24 h (`INVITE_TTL_MS`, then `CODE_EXPIRED`); seated players can always come back. The host can revoke it (`tables.newCode`): the old code goes to `retiredCodes`, still resolves for seated players (their page follows `watch().code` to the new one) and for nobody else. `join` with an unknown or hidden code returns `null` instead of throwing, so the spent token of the per-user lookup bucket (`LOOKUP_LIMIT`: 10, then one per 30 s) is kept; past it, `RATE_LIMITED`. Tables from before keep their 6-character codes and never expire.
 - Rendering: React escapes by default; never use `dangerouslySetInnerHTML` with user data. Display names and chat render as text.
 - Private tables are unlisted and not enumerable; public lobby (later) shows only what a joiner needs.
 
@@ -237,7 +237,7 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 - Tools: **Seed** (6 bot accounts, an open lobby to join, one live bot match, two finished ones), **Start a bot match** (level, live or fast, target), **Delete test data** (removes only `isTest` rows, including their action logs).
 - The panel is English-only: it is an internal tool, an explicit exception to the i18n rule in §8.
 
-**Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 6 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`. Names are validated server-side (2–24 chars, no control characters).
+**Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 8 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`, and expire for joining after 24 h (§9.3; older tables keep 6). Names are validated server-side (2–24 chars, no control characters).
 
 **Reconnect** is built (§7): heartbeats, a 90 s grace period, stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
 

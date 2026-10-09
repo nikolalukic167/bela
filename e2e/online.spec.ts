@@ -7,7 +7,7 @@ test('two friends at one table: create, share, join, play, drop out and come bac
   const ana = await guest(browser, 'Ana', errors);
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
-  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{6}$/);
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
   const link = ana.page.url();
 
   const bruno = await guest(browser, 'Bruno', errors);
@@ -42,4 +42,27 @@ test('the leaderboard is public', async ({ page }) => {
   await page.goto('#/leaderboard');
   await expect(page.getByRole('heading', { name: 'Ljestvica' })).toBeVisible();
   await expect(page.getByText('Još nitko nema dovoljno rangiranih partija.')).toBeVisible();
+});
+
+test('the host replaces the invite code: the old link stops working, the new one seats a friend', async ({ browser }) => {
+  const errors: string[] = [];
+  const ana = await guest(browser, 'Ana', errors);
+  await ana.page.getByRole('button', { name: 'Novi stol' }).click();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
+  const oldLink = ana.page.url();
+
+  ana.page.once('dialog', (d) => void d.accept());
+  await ana.page.getByRole('button', { name: 'Nova šifra' }).click();
+  await expect(ana.page).not.toHaveURL(oldLink);
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
+  const newLink = ana.page.url();
+
+  const cvita = await guest(browser, 'Cvita', errors);
+  await cvita.page.goto(oldLink);
+  await expect(cvita.page.getByText('Ovaj stol ne postoji.')).toBeVisible();
+  await cvita.page.goto(newLink);
+  await cvita.page.getByRole('button', { name: 'Sjedni za stol' }).click();
+  await expect(ana.page.getByText('Cvita')).toBeVisible();
+  expect(errors).toEqual([]);
 });

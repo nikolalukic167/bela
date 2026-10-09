@@ -18,7 +18,7 @@ describe('lobby', () => {
     const host = await signUp(t, 'Host');
     const friend = await signUp(t, 'Friend');
     const c = await host.as.mutation(api.tables.create, { options: OPTIONS });
-    expect(c).toMatch(/^[A-Z2-9]{6}$/);
+    expect(c).toMatch(/^[A-Z2-9]{8}$/);
     await friend.as.mutation(api.tables.join, { code: c.toLowerCase() });
     const lobby = await host.as.query(api.tables.watch, { code: c });
     expect(lobby?.seats.map((s) => s.kind)).toEqual(['user', 'user', 'empty', 'empty']);
@@ -56,13 +56,13 @@ describe('lobby', () => {
     await failsWith((await signUp(t, 'Late')).as.mutation(api.tables.join, { code: c }), 'TABLE_FULL');
   });
 
-  it('rejoining is idempotent and unknown codes are NOT_FOUND', async () => {
+  it('rejoining is idempotent and an unknown code finds nothing', async () => {
     const t = newBackend();
     const host = await signUp(t, 'Host');
     const c = await host.as.mutation(api.tables.create, { options: OPTIONS });
     await host.as.mutation(api.tables.join, { code: c });
     expect((await host.as.query(api.tables.watch, { code: c }))?.seats.filter((s) => s.kind === 'user')).toHaveLength(1);
-    await failsWith(host.as.mutation(api.tables.join, { code: 'ZZZZZZ' }), 'NOT_FOUND');
+    expect(await host.as.mutation(api.tables.join, { code: 'ZZZZZZZZ' })).toBeNull();
   });
 
   it('requires a signed-in user', async () => {
@@ -132,7 +132,7 @@ describe('playing', () => {
     const { t, host, friend, c } = await startedTable();
     const hostW = await host.as.query(api.tables.watch, { code: c });
     const friendW = await friend.as.query(api.tables.watch, { code: c });
-    expect(Object.keys(hostW!).sort()).toEqual(['code', 'deadline', 'isHost', 'isTest', 'mySeat', 'options', 'rated', 'rematchCode', 'result', 'seats', 'spectating', 'status', 'view']);
+    expect(Object.keys(hostW!).sort()).toEqual(['code', 'codeExpiresAt', 'deadline', 'isHost', 'isTest', 'mySeat', 'options', 'rated', 'rematchCode', 'result', 'seats', 'spectating', 'status', 'view']);
     const seed = await t.run(async (ctx) => (await ctx.db.query('tableStates').first())!.state.seed as number);
     for (const json of [JSON.stringify(hostW), JSON.stringify(friendW)]) expect(json).not.toContain(`"seed":${seed}`);
     const hostCards = new Set(hostW!.view!.hand.map((x) => `${x.rank}${x.suit}`));

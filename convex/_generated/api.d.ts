@@ -15,6 +15,7 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_errors from "../lib/errors.js";
+import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_ratingLogic from "../lib/ratingLogic.js";
 import type * as lib_tableLogic from "../lib/tableLogic.js";
 import type * as ratings from "../ratings.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/config": typeof lib_config;
   "lib/errors": typeof lib_errors;
+  "lib/rateLimit": typeof lib_rateLimit;
   "lib/ratingLogic": typeof lib_ratingLogic;
   "lib/tableLogic": typeof lib_tableLogic;
   ratings: typeof ratings;
