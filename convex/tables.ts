@@ -30,11 +30,14 @@ import {
   seatOf,
   standIn,
   startState,
+  timeoutFor,
+  timeoutMove,
   type Seat,
   type ServerBotLevel,
 } from './lib/tableLogic';
 import type { BelaAction, BelaState } from '../src/games/bela/state';
 import { viewFor } from '../src/games/bela/view';
+import { belaGame } from '../src/games/bela/game';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -85,7 +88,13 @@ const botLevelOf = (t: Doc<'tables'>): ServerBotLevel => (t.options.botLevel ?? 
 /** Schedules the server's next step (bot move, trick collection) if there is one. */
 export async function scheduleNext(ctx: MutationCtx, table: Doc<'tables'>, row: Doc<'tableStates'>) {
   const m = moverOf(row.state as BelaState, table.seats as Seat[]);
-  if (m.kind === 'none') return;
+  if (m.kind === 'none') {
+    // Waiting on the humans: start the turn timer (a later move makes it a no-op).
+    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[]);
+    await ctx.db.patch(row._id, { deadline: timer ? Date.now() + timer.ms : undefined });
+    if (timer) await ctx.scheduler.runAfter(timer.ms, internal.tables.timeout, { tableId: table._id, version: row.version });
+    return;
+  }
   const delay =
     table.speed === 'fast'
       ? 0
@@ -377,6 +386,19 @@ export const step = internalMutation({
   },
 });
 
+/** Scheduled turn timer: the humans didn't move in time, so the server moves for them. */
+export const timeout = internalMutation({
+  args: { tableId: v.id('tables'), version: v.number() },
+  handler: async (ctx, { tableId, version }) => {
+    const table = await ctx.db.get(tableId);
+    if (!table || table.status !== 'playing') return;
+    const row = await loadState(ctx, tableId);
+    if (row.version !== version) return;
+    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version);
+    if (move) await commit(ctx, table, row, belaGame.apply(row.state as BelaState, move.action), [move]);
+  },
+});
+
 // ---------- reads ----------
 
 function publicSeats(seats: Seat[], me: Id<'users'>) {
@@ -405,8 +427,10 @@ export const watch = query({
     const mySeat = ownSeat(seats, user._id);
     let view = null;
     let spectating = false;
+    let deadline: number | null = null;
     if (table.status !== 'lobby') {
       const row = await loadState(ctx, table._id);
+      deadline = table.status === 'playing' ? (row.deadline ?? null) : null;
       // Admins may watch bot-only test tables (never real ones) from seat 0.
       spectating = mySeat < 0 && table.isTest && user.isAdmin === true;
       if (mySeat >= 0 || spectating) view = viewFor(row.state as BelaState, Math.max(mySeat, 0));
@@ -422,6 +446,7 @@ export const watch = query({
       isTest: table.isTest,
       spectating,
       view,
+      deadline,
     };
   },
 });

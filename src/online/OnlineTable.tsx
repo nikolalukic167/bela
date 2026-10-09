@@ -82,6 +82,7 @@ function OnlineTable({ code }: { code: string }) {
             ...(data.mySeat !== null && data.status !== 'finished' ? [{ label: t('online.leave'), onClick: () => void leaveGame() }] : []),
           ]}
         />
+        {data.deadline !== null && (data.view.isMyTurn || data.view.phase === 'handOver') && <TurnCountdown deadline={data.deadline} />}
         {data.spectating && <div className="toast toast-top toast-center"><div className="alert alert-info">{t('online.spectating')}</div></div>}
         {error && <div className="toast toast-top toast-center"><div role="alert" className="alert alert-error">{error}</div></div>}
       </>
@@ -110,6 +111,27 @@ function useHeartbeat(code: string, active: boolean) {
     };
   }, [code, active, heartbeat]);
 }
+
+/** Shown for the last seconds of this player's turn timer; at zero the server moves for them. */
+function TurnCountdown({ deadline }: { deadline: number }) {
+  const { t } = useI18n();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const left = Math.max(0, Math.ceil((deadline - now) / 1000));
+  if (left > COUNTDOWN_FROM_S) return null;
+  return (
+    <div className="pointer-events-none fixed top-16 left-1/2 z-30 -translate-x-1/2" role="timer" aria-live="polite">
+      <span className={`badge badge-lg ${left <= 5 ? 'badge-error' : 'badge-warning'}`}>
+        {t('online.timeLeft')}: {left} s
+      </span>
+    </div>
+  );
+}
+
+const COUNTDOWN_FROM_S = 20;
 
 function TableLobby({ data, code, error, guard }: { data: Watched; code: string; error: string | null; guard: (fn: () => Promise<unknown>) => Promise<void> }) {
   const { t } = useI18n();

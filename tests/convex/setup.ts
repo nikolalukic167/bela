@@ -23,8 +23,7 @@ export const OPTIONS = { target: 501 as const, direction: 'ccw' as const, belaAl
  * stops at `ms`, so players are not timed out unless the test lets that much time pass.
  * `onTick` runs after each tick with the time elapsed so far (e.g. to send heartbeats).
  */
-export async function elapse(t: Backend, ms: number, onTick?: (elapsed: number) => Promise<unknown>) {
-  const TICK = 500;
+export async function elapse(t: Backend, ms: number, onTick?: (elapsed: number) => Promise<unknown>, TICK = 500) {
   for (let at = TICK; at <= ms; at += TICK) {
     vi.advanceTimersByTime(TICK);
     await t.finishInProgressScheduledFunctions();

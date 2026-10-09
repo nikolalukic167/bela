@@ -73,6 +73,8 @@ export default defineSchema({
     tableId: v.id('tables'),
     state: v.any(),
     version: v.number(),
+    /** When the turn timer runs out for the humans to move (shown as a countdown). */
+    deadline: v.optional(v.number()),
   }).index('by_table', ['tableId']),
 
   // Append-only action log (seed + options + actions rebuild any game).
