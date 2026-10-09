@@ -7,6 +7,7 @@ import { TIMER_PROFILES } from '../../convex/lib/config';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
+import { ArrowLeftIcon } from '../ui/icons';
 import { OnlineGate } from './OnlineGate';
 import { GameChat, LobbyChat } from './TableChat';
 import { useOnlineGame, type Watched } from './useOnlineGame';
@@ -51,6 +52,7 @@ function OnlineTable({ code }: { code: string }) {
         <main className="mx-auto max-w-xl px-4 py-12 text-center">
           <p className="mb-4">{t('online.notFound')}</p>
           <Link to="/online" className="btn btn-primary">
+            <ArrowLeftIcon />
             {t('online.back')}
           </Link>
         </main>
@@ -267,6 +269,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             </button>
           )}
           <Link to="/online" className="btn btn-ghost">
+            <ArrowLeftIcon />
             {t('online.back')}
           </Link>
         </div>

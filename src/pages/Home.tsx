@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useState, type CSSProperties } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAccount } from '../account/account';
 import { GAMES } from '../core/registry';
 import { useI18n } from '../i18n/i18n';
 import { BOT_LEVELS, DEFAULT_BOT_LEVEL, type BotLevel } from '../games/bela/bots';
 import type { BelaState } from '../games/bela/state';
+import type { Card as CardT } from '../core/cards';
 import { TUTORIAL_DONE_KEY } from '../games/bela/ui/BelaTutorial';
 import { AppShell } from '../ui/AppShell';
+import { Card } from '../ui/Card';
+import { BookIcon, ClockIcon, GlobeIcon, PlayIcon, TrophyIcon } from '../ui/icons';
+import { Logo } from '../ui/Logo';
 import { loadJson, saveJson } from '../ui/storage';
 
 export const BOT_LEVEL_KEY = 'bela:level';
@@ -17,43 +21,20 @@ function greetingKey(hour: number) {
   return 'home.greet.evening' as const;
 }
 
+/** Jack, nine and ace of hearts, the top trumps, in the viewer's own deck. */
+const FAN: { card: CardT; className: string }[] = [
+  { card: { suit: 'hearts', rank: 'J' }, className: 'left-0 top-3 -rotate-[14deg]' },
+  { card: { suit: 'hearts', rank: '9' }, className: 'left-7 top-0 -rotate-2' },
+  { card: { suit: 'hearts', rank: 'A' }, className: 'left-14 top-3 rotate-[10deg]' },
+];
+
 const Fan = () => (
-  <div className="relative h-[72px] w-24 shrink-0" aria-hidden="true">
-    {[
-      ['J', 'left-0 top-2.5 -rotate-[14deg] text-neutral'],
-      ['9', 'left-6 top-1 -rotate-2 text-error'],
-      ['A', 'left-12 top-2.5 rotate-[10deg] text-neutral'],
-    ].map(([r, c]) => (
-      <div key={r} className={`absolute h-[66px] w-12 rounded-[7px] bg-[#fbfaf5] px-1.5 py-1 text-base font-bold shadow-md ${c}`}>
-        {r}
-      </div>
+  <div className="relative mr-1 h-[92px] w-[112px] shrink-0" aria-hidden="true" style={{ '--cw': '56px' } as CSSProperties}>
+    {FAN.map(({ card, className }) => (
+      <Card key={card.rank} card={card} className={`absolute origin-bottom ${className}`} />
     ))}
   </div>
 );
-
-/** Phone-only tab bar from the concept; "Ljestvica" joins once ratings have a page. */
-function TabBar({ online }: { online: boolean }) {
-  const { t } = useI18n();
-  const tab = ({ isActive }: { isActive: boolean }) =>
-    `flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs ${isActive ? 'font-bold text-primary' : 'text-base-content/70'}`;
-  return (
-    <nav
-      className={`fixed inset-x-0 bottom-0 z-20 grid border-t border-base-300 bg-base-300 pb-[env(safe-area-inset-bottom)] sm:hidden ${online ? 'grid-cols-3' : 'grid-cols-2'}`}
-    >
-      <NavLink to="/" end className={tab}>
-        {t('tab.play')}
-      </NavLink>
-      {online && (
-        <NavLink to="/online" className={tab}>
-          {t('tab.online')}
-        </NavLink>
-      )}
-      <NavLink to="/rules/bela" className={tab}>
-        {t('tab.rules')}
-      </NavLink>
-    </nav>
-  );
-}
 
 function BelaPanel({ online }: { online: boolean }) {
   const { t } = useI18n();
@@ -69,8 +50,8 @@ function BelaPanel({ online }: { online: boolean }) {
     <div className="flex flex-col gap-4">
       <div className="card bg-base-200 rounded-3xl">
         <div className="card-body gap-6 p-6">
-          <div className="flex items-end justify-between">
-            <div>
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
               <h2 className="font-display text-5xl font-extrabold leading-none">Bela</h2>
               <p className="mt-1.5 text-sm text-base-content/75">{t('home.teams')}</p>
             </div>
@@ -113,11 +94,13 @@ function BelaPanel({ online }: { online: boolean }) {
               </>
             ) : (
               <button type="button" className="btn btn-primary h-[52px] rounded-2xl text-[17px]" onClick={play}>
+                <PlayIcon />
                 {t('home.playBots')}
               </button>
             )}
             {online && (
               <Link to="/online" className="btn btn-outline h-[52px] rounded-2xl border-accent text-[17px]">
+                <GlobeIcon />
                 {t('home.playOnline')}
               </Link>
             )}
@@ -138,16 +121,30 @@ export function Home() {
   const { t } = useI18n();
   const online = useAccount().status !== 'unavailable';
   const soon = GAMES.filter((g) => !g.available);
+  const links = [
+    { to: '/rules/bela', label: t('home.rules'), Icon: BookIcon },
+    { to: '/history', label: t('tab.history'), Icon: ClockIcon },
+    ...(online ? [{ to: '/leaderboard', label: t('menu.leaderboard'), Icon: TrophyIcon }] : []),
+  ];
   return (
     <AppShell>
-      <main className="mx-auto w-full max-w-xl px-4 pb-24 sm:pb-12">
+      <main className="mx-auto w-full max-w-xl px-4 pb-8 sm:pb-12">
         <div className="py-6 sm:py-10">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-5xl">
-            <span className="text-primary">♣♥</span> Karte
+          <h1>
+            <Logo size="lg" />
+            <span className="sr-only"> – {t('brand.tagline')}</span>
           </h1>
-          <p className="mt-2 text-base-content/70">{t(greetingKey(new Date().getHours()))}</p>
+          <p className="mt-3 text-base-content/75">{t(greetingKey(new Date().getHours()))}</p>
         </div>
         <BelaPanel online={online} />
+        <nav aria-label={t('home.links')} className={`mt-4 grid gap-2 ${links.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {links.map(({ to, label, Icon }) => (
+            <Link key={to} to={to} className="btn h-auto min-h-16 flex-col gap-1 rounded-2xl border-0 bg-base-200 py-3 text-sm font-medium">
+              <Icon className="size-5 text-primary" />
+              {label}
+            </Link>
+          ))}
+        </nav>
         {soon.length > 0 && (
           <ul className="mt-6 flex flex-wrap gap-2" aria-label={t('home.choose')}>
             {soon.map((g) => (
@@ -157,9 +154,7 @@ export function Home() {
             ))}
           </ul>
         )}
-        <p className="mt-4 text-sm text-base-content/60">{t('home.more')}</p>
       </main>
-      <TabBar online={online} />
     </AppShell>
   );
 }

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAccount } from '../account/account';
 import { SignInDialog } from '../account/SignInDialog';
 import { GAMES } from '../core/registry';
 import { useI18n } from '../i18n/i18n';
-import { DECK_IDS, DeckPreview } from './decks';
+import { DECK_IDS, DECKS, DeckPreview } from './decks';
+import { BookIcon, CardsIcon, ChartIcon, ClockIcon, GlobeIcon, HomeIcon, LogInIcon, LogOutIcon, MenuIcon, ShieldIcon, TrophyIcon, UserIcon, WrenchIcon } from './icons';
+import { Logo } from './Logo';
 import { useSettings, type Speed } from './settings';
 
 export interface MenuAction {
@@ -29,7 +31,9 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
   const [open, setOpen] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const online = useAccount().status !== 'unavailable';
+  const atHome = useLocation().pathname === '/';
   const close = () => setOpen(false);
+  useEffect(() => DECKS[deck].preload?.(), [deck]);
   const menuButton = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLUListElement>(null);
   // Keyboard users: opening moves focus into the menu, Escape closes it and returns focus.
@@ -68,7 +72,7 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
         aria-hidden="true"
       />
       <div className={`drawer-content flex flex-col ${fixed ? 'h-dvh overflow-hidden' : 'min-h-dvh'}`}>
-        <header className="navbar bg-base-300/80 min-h-12 gap-2 px-2 shrink-0">
+        <header className="navbar bg-base-300/80 min-h-12 gap-1 px-2 shrink-0">
           <button
             ref={menuButton}
             type="button"
@@ -77,25 +81,30 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
             aria-expanded={open}
             onClick={() => setOpen(true)}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="inline-block size-6 stroke-current" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <MenuIcon className="size-6" />
           </button>
-          {center ?? (
-            <Link to="/" className="text-xl font-bold">
-              <span className="text-primary">♣♥</span> Karte
+          {!atHome && (
+            <Link to="/" className="btn btn-square btn-ghost" aria-label={t('nav.home')} title={t('nav.home')}>
+              <HomeIcon className="size-6" />
             </Link>
           )}
+          {/* Home shows the big logo itself. */}
+          {center ?? (!atHome && (
+            <Link to="/" className="ml-1" aria-label={`Karte – ${t('nav.home')}`}>
+              <Logo />
+            </Link>
+          ))}
         </header>
-        {children}
+        {fixed ? children : <div className="flex flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">{children}</div>}
+        {!fixed && <TabBar online={online} />}
       </div>
 
       <nav className="drawer-side z-50" aria-label={t('menu.title')}>
         <label htmlFor="app-drawer" aria-label={t('menu.close')} className="drawer-overlay" />
         <ul ref={menu} className="menu bg-base-200 text-base-content min-h-full w-72 p-4 gap-1">
           <li className="mb-2">
-            <Link to="/" onClick={close} className="text-xl font-bold">
-              <span className="text-primary">♣♥</span> Karte
+            <Link to="/" onClick={close} aria-label={`Karte – ${t('nav.home')}`}>
+              <Logo />
             </Link>
           </li>
 
@@ -119,12 +128,14 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
             <ul>
               <li>
                 <NavLink to="/" end onClick={close}>
+                  <HomeIcon />
                   {t('nav.home')}
                 </NavLink>
               </li>
               {online && (
                 <li>
                   <NavLink to="/online" onClick={close}>
+                    <GlobeIcon />
                     {t('menu.online')}
                   </NavLink>
                 </li>
@@ -132,6 +143,7 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
               {online && (
                 <li>
                   <NavLink to="/leaderboard" onClick={close}>
+                    <TrophyIcon />
                     {t('menu.leaderboard')}
                   </NavLink>
                 </li>
@@ -144,11 +156,13 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                       <ul>
                         <li>
                           <NavLink to={`/play/${g.id}`} onClick={close}>
+                            <CardsIcon />
                             {t('home.play')}
                           </NavLink>
                         </li>
                         <li>
                           <NavLink to={`/rules/${g.id}`} onClick={close}>
+                            <BookIcon />
                             {t('home.rules')}
                           </NavLink>
                         </li>
@@ -173,16 +187,19 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
             <ul>
               <li>
                 <NavLink to="/history" onClick={close}>
+                  <ClockIcon />
                   {t('menu.history')}
                 </NavLink>
               </li>
               <li>
                 <NavLink to="/stats" onClick={close}>
+                  <ChartIcon />
                   {t('menu.stats')}
                 </NavLink>
               </li>
               <li>
                 <NavLink to="/privacy" onClick={close}>
+                  <ShieldIcon />
                   {t('menu.privacy')}
                 </NavLink>
               </li>
@@ -278,6 +295,7 @@ function AccountMenu({ onDone, onSignIn }: { onDone: () => void; onSignIn: () =>
         <ul>
           <li>
             <button type="button" onClick={() => { onDone(); onSignIn(); }}>
+              <LogInIcon />
               {t('menu.signIn')}
             </button>
           </li>
@@ -299,22 +317,57 @@ function AccountMenu({ onDone, onSignIn }: { onDone: () => void; onSignIn: () =>
           </li>
           <li>
             <NavLink to="/account" onClick={onDone}>
+              <UserIcon />
               {t('menu.myAccount')}
             </NavLink>
           </li>
           {account.profile?.isAdmin && (
             <li>
               <NavLink to="/admin" onClick={onDone}>
+                <WrenchIcon />
                 {t('menu.admin')}
               </NavLink>
             </li>
           )}
           <li>
             <button type="button" onClick={() => { onDone(); account.signOut(); }}>
+              <LogOutIcon />
               {t('menu.signOut')}
             </button>
           </li>
         </ul>
       );
   }
+}
+
+/** Phone-only bottom bar on every scrolling page, so home is always one tap away. The card table has its own layout. */
+function TabBar({ online }: { online: boolean }) {
+  const { t } = useI18n();
+  const tab = ({ isActive }: { isActive: boolean }) =>
+    `flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs ${isActive ? 'font-bold text-primary' : 'text-base-content/70'}`;
+  return (
+    <nav
+      aria-label={t('menu.title')}
+      className={`fixed inset-x-0 bottom-0 z-20 grid border-t border-base-300 bg-base-300 pb-[env(safe-area-inset-bottom)] sm:hidden ${online ? 'grid-cols-4' : 'grid-cols-3'}`}
+    >
+      <NavLink to="/" end className={tab}>
+        <HomeIcon />
+        {t('nav.home')}
+      </NavLink>
+      {online && (
+        <NavLink to="/online" className={tab}>
+          <GlobeIcon />
+          {t('tab.online')}
+        </NavLink>
+      )}
+      <NavLink to="/rules/bela" className={tab}>
+        <BookIcon />
+        {t('tab.rules')}
+      </NavLink>
+      <NavLink to="/history" className={tab}>
+        <ClockIcon />
+        {t('tab.history')}
+      </NavLink>
+    </nav>
+  );
 }

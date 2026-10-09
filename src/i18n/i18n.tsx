@@ -24,3 +24,8 @@ export function useI18n(): I18n {
   if (!ctx) throw new Error('useI18n outside I18nProvider');
   return ctx;
 }
+
+/** Fills {placeholders} in a translated string: whole sentences stay translatable, never concatenated. */
+export function fmt(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+}

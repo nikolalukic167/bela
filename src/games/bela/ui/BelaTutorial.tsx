@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useI18n } from '../../../i18n/i18n';
+import { fmt, useI18n } from '../../../i18n/i18n';
+import { useCardNames } from '../../../ui/decks';
 import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
 import { saveJson } from '../../../ui/storage';
 import type { GamePort } from '../../../ui/gamePort';
@@ -16,6 +17,8 @@ export const TUTORIAL_DONE_KEY = 'bela:tutorialDone';
 /** One guided hand against bots on a fixed deal, with a tip for each step (architecture §2, Phase 1). */
 export function BelaTutorial() {
   const { t } = useI18n();
+  // Tips name cards the way the player's deck prints them (U/O on Hungarian cards, J/Q on French).
+  const names = useCardNames();
   const navigate = useNavigate();
   const { speed } = useSettings();
   const game = useGame(belaGame, {
@@ -46,7 +49,13 @@ export function BelaTutorial() {
     <aside className="flex items-start gap-3 border-b-2 border-info bg-base-300 px-4 py-3 text-base-content" aria-live="polite" aria-label={t('tut.label')}>
       <p className="flex-1 text-sm leading-snug">
         <strong className="mr-1 text-info">{t('tut.title')}:</strong>
-        {t(`tut.${tip}`)}
+        {fmt(t(`tut.${tip}`), {
+          J: names.rank('J'),
+          Q: names.rank('Q'),
+          K: names.rank('K'),
+          A: names.rank('A'),
+          suit: names.suit('hearts').toLowerCase(),
+        })}
       </p>
     </aside>
   );

@@ -63,7 +63,7 @@ test('the tutorial guides a whole hand, played with the keyboard only', async ({
   await page.goto('#/');
   await page.getByRole('link', { name: /vodič/ }).click();
   const tip = page.getByRole('complementary', { name: 'Savjet' });
-  await expect(tip).toContainText('zovi herc');
+  await expect(tip).toContainText('zovi srce'); // hearts in the default Hungarian deck
   await expectAccessible(page);
 
   // Only hearts may be called, and the picker already has focus.

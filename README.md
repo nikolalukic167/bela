@@ -1,5 +1,7 @@
 # Karte – Bela (Croatian Belot) in the browser
 
+![Karte](public/og-image.png)
+
 A responsive web app for playing **Bela** against three bots, built so more card games can be added later.
 
 **Live:** https://nikolalukic167.github.io/bela/ (after GitHub Pages is enabled, see below)
@@ -22,7 +24,7 @@ npm run build      # type-check + production build into dist/
 src/core/          game-agnostic: cards, seeded RNG, GameDefinition interface, game registry
 src/games/bela/    pure Bela engine (rules, legality, declarations, scoring, bot) + ui/
 src/ratings/       OpenSkill player ratings: replay match history, leaderboard, predictions
-src/ui/            shared UI: SVG Card, Modal, useGame hook (bots, auto actions, persistence)
+src/ui/            shared UI: Card, decks (Hungarian + French), Logo, icons, Modal, useGame hook
 src/pages/         Home (game picker), Play/:gameId, Rules/:gameId
 src/online/        online lobby and table pages (Convex)
 src/account/       sign-in (guest, username, Google) and account context
@@ -34,6 +36,8 @@ config/            build config (Content-Security-Policy)
 src/i18n/          Croatian / English strings
 docs/rules/bela.md exact rules the engine implements
 docs/bots/         bot levels (random → heuristic → tracking → PIMC → ISMCTS), experiments, report
+docs/design/       brand guide, Hungarian deck (SVG/PNG), visual concept
+scripts/cards/     generators for the Hungarian deck and the brand assets
 ```
 
 ## Bots
@@ -50,8 +54,12 @@ Because engines are pure and serialisable, the same code can later run on a serv
 
 ## UI
 
-App chrome (menu, navbar, dialogs, buttons) uses [daisyUI](https://daisyui.com) 5 on Tailwind CSS 4, theme `forest`.
-Only the card-table layout in `src/styles.css` is custom CSS.
+App chrome (menu, navbar, dialogs, buttons) uses [daisyUI](https://daisyui.com) 5 on Tailwind CSS 4, with the custom
+`bela` theme in `src/styles.css`. Only the card-table layout there is custom CSS.
+
+Cards default to the Hungarian deck (mađarice), generated from public-domain suit artwork plus original aces and
+court figures: [docs/design/hungarian-deck/](docs/design/hungarian-deck/README.md). Brand, colours, icons and
+Croatian copy conventions: [docs/design/brand.md](docs/design/brand.md).
 
 ## Online play
 

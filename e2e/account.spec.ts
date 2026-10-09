@@ -49,7 +49,7 @@ test('rename, block a player, then delete the account', async ({ browser }) => {
   await ana.page.getByRole('button', { name: 'Igrači za stolom' }).click();
   ana.page.once('dialog', (d) => void d.accept());
   await ana.page.getByRole('button', { name: 'Blokiraj' }).click();
-  await expect(ana.page.getByRole('button', { name: 'Blokiran' })).toBeDisabled();
+  await expect(ana.page.getByRole('button', { name: 'Blokirano' })).toBeDisabled();
   await ana.page.getByRole('button', { name: 'Prijavi' }).click();
   await ana.page.getByRole('radio', { name: 'Vrijeđanje ili uznemiravanje' }).check();
   await ana.page.getByRole('button', { name: 'Pošalji prijavu' }).click();
