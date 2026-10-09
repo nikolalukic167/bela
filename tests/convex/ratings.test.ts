@@ -154,6 +154,10 @@ describe('leaderboard', () => {
 });
 
 describe('leaderboard account-age gate', () => {
+  it('the minimum account age is one day (decided, architecture §14)', () => {
+    expect(LEADERBOARD_MIN_AGE_MS).toBe(24 * 60 * 60 * 1000);
+  });
+
   it('leaves out accounts younger than the minimum age, however many games they have', async () => {
     const t = newBackend();
     const add = (name: string) =>

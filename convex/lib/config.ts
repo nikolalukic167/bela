@@ -33,8 +33,8 @@ export type TimerProfileName = keyof typeof TIMER_PROFILES;
 export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
 /** Rated games a player needs before appearing on the public leaderboard (architecture §9.1). */
 export const LEADERBOARD_MIN_GAMES = 10;
-/** ...and an account at least this old, so a farm of fresh accounts can't fill the board (§9.1). */
-export const LEADERBOARD_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** ...and an account at least a day old, so a farm of fresh accounts can't fill the board (§9.1, decided §14). */
+export const LEADERBOARD_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 /**
  * Most display rating one player can gain off any single opponent in DAILY_GAIN_WINDOW_MS
  * (win-trading, §9.1). A new player's first win is worth about 2.4 points, so this is roughly
