@@ -125,7 +125,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 
 ## 8. Client design
 
-- Two adapters behind one hook interface: `useGame` (local, runs the engine in the browser) and `useOnlineGame` (subscribes to `tables.myView`, sends `tables.act`). The table components consume `{view, legalActions, act}` and don't know which is in use.
+- Two adapters behind one interface, `GamePort` (`src/ui/gamePort.ts`): `useGame` (local, runs the engine in the browser) and `useOnlineGame` (`src/online/`, subscribes to `tables.watch`, sends `tables.act`, and owns the heartbeat and the turn countdown). `TableScreen` consumes `{view, legalActions, act, secondsLeft?}` and doesn't know which is in use; the pure decisions behind the online adapter are in `src/online/onlineGame.ts`.
 - UI components are presentational; game logic stays in `games/*`. No rules in JSX.
 - State: local React state + Convex reactive queries. No global store until a concrete need appears.
 - Optimistic UI only for harmless things (selecting a card). Moves wait for the server.

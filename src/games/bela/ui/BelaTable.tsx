@@ -8,6 +8,7 @@ import { SuitMark } from '../../../ui/decks';
 import { AppShell, type MenuAction } from '../../../ui/AppShell';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
+import type { GamePort } from '../../../ui/gamePort';
 import { useGame } from '../../../ui/useGame';
 import { HUMAN_SEAT } from '../engine';
 import { belaGame } from '../game';
@@ -38,12 +39,13 @@ export function BelaTable() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { speed } = useSettings();
-  const { view, act, newGame, quit } = useGame(belaGame, {
+  const game = useGame(belaGame, {
     humanSeat: HUMAN_SEAT,
     botDelay: SPEED_DELAYS[speed].bot,
     autoDelay: SPEED_DELAYS[speed].auto,
     storageKey: 'bela:v2',
   });
+  const { view, newGame, quit } = game;
   const [showSettings, setShowSettings] = useState(false);
   const [lastOptions, setLastOptions] = useState<BelaOptions>(belaGame.defaultOptions);
   // Home's "Igraj protiv botova" arrives with the chosen strength and starts straight away.
@@ -78,8 +80,7 @@ export function BelaTable() {
   return (
     <>
       <TableScreen
-        view={view}
-        onAct={act}
+        game={{ ...game, view }}
         // "Igraj ponovno": a new match at once, same options (full options stay under menu > Nova igra).
         onMatchEnd={() => {
           quit();
@@ -102,9 +103,8 @@ export function BelaTable() {
 }
 
 interface ScreenProps {
-  /** The seat's view; teams are re-oriented so "us" is the viewer's team. */
-  view: SeatView;
-  onAct: Act;
+  /** Local or online game; teams in its view are re-oriented so "us" is the viewer's team. */
+  game: GamePort<BelaAction, SeatView> & { view: SeatView };
   /** Pressed on the match-over summary. */
   onMatchEnd: () => void;
   /** Extra entries at the top of the menu (new game, leave table...). */
@@ -116,11 +116,12 @@ interface ScreenProps {
 }
 
 /** Navbar score, felt table, score sheet and hand summary: shared by local and online play. */
-export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = [], names, spectating }: ScreenProps) {
+export function TableScreen({ game, onMatchEnd, gameActions = [], names, spectating }: ScreenProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [showSheet, setShowSheet] = useState(false);
-  const view = perspective(rawView);
+  const view = perspective(game.view);
+  const onAct: Act = game.act;
   const actions: MenuAction[] = [
     ...gameActions,
     { label: t('score.sheet'), onClick: () => setShowSheet(true) },
@@ -131,7 +132,7 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
     <SeatNames.Provider value={names ?? null}>
       <AppShell fixed gameActions={actions} center={<ScoreBar view={view} />}>
         <div className="felt-bg flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
-          <Table view={view} onAct={spectating ? () => undefined : onAct} />
+          <Table view={view} legal={spectating ? [] : game.legalActions} onAct={spectating ? () => undefined : onAct} />
           <aside className="hidden lg:flex flex-col gap-4 bg-base-300 p-6">
             <div className="flex items-end justify-between">
               {view.trump ? <TrumpTile view={view} large /> : <span />}
@@ -161,6 +162,7 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
         {!spectating && (view.phase === 'handOver' || view.phase === 'matchOver') && (
           <HandSummary view={view} onNext={() => onAct({ type: 'next' })} onNewGame={onMatchEnd} />
         )}
+        {game.secondsLeft != null && <TurnCountdown left={game.secondsLeft} />}
       </AppShell>
     </SeatNames.Provider>
   );
@@ -217,12 +219,24 @@ function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
 
 type Act = (a: BelaAction) => void;
 
-function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
+/** Shown for the last seconds of the viewer's turn timer; at zero the server moves for them. */
+function TurnCountdown({ left }: { left: number }) {
+  const { t } = useI18n();
+  return (
+    <div className="pointer-events-none fixed top-16 left-1/2 z-30 -translate-x-1/2" role="timer" aria-live="polite">
+      <span className={`badge badge-lg ${left <= 5 ? 'badge-error' : 'badge-warning'}`}>
+        {t('online.timeLeft')}: {left} s
+      </span>
+    </div>
+  );
+}
+
+function Table({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; onAct: Act }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<CardT | null>(null);
   useEffect(() => setSelected(null), [view.isMyTurn, view.phase]);
 
-  const canPlay = (c: CardT) => view.playable.some((l) => sameCard(l, c));
+  const canPlay = (c: CardT) => legal.some((l) => l.type === 'play' && sameCard(l.card, c));
   const play = (c: CardT) => {
     if (!canPlay(c)) return;
     if (canHover() || (selected && sameCard(selected, c))) onAct({ type: 'play', card: c });
@@ -289,7 +303,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
         )}
       </section>
 
-      {view.phase === 'trump' && view.isMyTurn && <TrumpPicker view={view} onAct={onAct} />}
+      {view.phase === 'trump' && legal.length > 0 && <TrumpPicker view={view} legal={legal} onAct={onAct} />}
     </main>
   );
 }
@@ -348,7 +362,7 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
   );
 }
 
-function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
+function TrumpPicker({ view, legal, onAct }: { view: SeatView; legal: BelaAction[]; onAct: Act }) {
   const { t } = useI18n();
   const names = useContext(SeatNames);
   const count = (suit: Suit) => view.hand.filter((c) => c.suit === suit).length;
@@ -408,7 +422,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
             );
           })}
         </div>
-        {!view.mustCall && (
+        {legal.some((a) => a.type === 'pass') && (
           <button type="button" className="btn btn-outline h-12 rounded-2xl border-accent" onClick={() => onAct({ type: 'pass' })}>
             {t('trump.pass')}
           </button>

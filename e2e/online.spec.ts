@@ -22,6 +22,10 @@ test('two friends at one table: create, share, join, play, drop out and come bac
   const [a, b] = [await hand(ana.page), await hand(bruno.page)];
   expect(a.filter((c) => b.includes(c))).toEqual([]);
 
+  // Ana speaks first. Near the end of her turn timer a countdown appears, for her only.
+  await expect(ana.page.getByRole('timer')).toBeVisible({ timeout: 40_000 });
+  await expect(bruno.page.getByRole('timer')).toHaveCount(0);
+
   // Ana speaks first and passes; Bruno's screen moves on to his trump call.
   await ana.page.getByRole('button', { name: 'Dalje' }).click();
   await expect(bruno.page.locator('.trump-btn').first()).toBeVisible();
