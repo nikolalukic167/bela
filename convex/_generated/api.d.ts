@@ -25,6 +25,7 @@ import type * as lib_names from "../lib/names.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_ratingLogic from "../lib/ratingLogic.js";
 import type * as lib_tableLogic from "../lib/tableLogic.js";
+import type * as lib_uniqueNames from "../lib/uniqueNames.js";
 import type * as maintenance from "../maintenance.js";
 import type * as moderation from "../moderation.js";
 import type * as ratings from "../ratings.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/ratingLogic": typeof lib_ratingLogic;
   "lib/tableLogic": typeof lib_tableLogic;
+  "lib/uniqueNames": typeof lib_uniqueNames;
   maintenance: typeof maintenance;
   moderation: typeof moderation;
   ratings: typeof ratings;

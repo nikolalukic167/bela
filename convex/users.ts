@@ -1,12 +1,13 @@
 import { getAuthUserId } from '@convex-dev/auth/server';
 import { v } from 'convex/values';
 import type { Id, TableNames } from './_generated/dataModel';
-import { mutation, query, type MutationCtx } from './_generated/server';
+import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import { anonymiseSeats } from './lib/accountLogic';
 import { requireUser } from './lib/auth';
 import { DELETED_NAME } from './lib/config';
 import { TableError } from './lib/errors';
-import { acceptName, renameCheck } from './lib/names';
+import { acceptName, cleanName, nameKey, renameCheck } from './lib/names';
+import { freeName, isReservedName, nameTaken } from './lib/uniqueNames';
 import type { Seat } from './lib/tableLogic';
 import { leaveTable } from './tables';
 
@@ -29,17 +30,64 @@ export const me = query({
 });
 
 /**
- * Changes the display name. Names are filtered (offensive names are refused) and rate-limited;
- * they are not unique (open decision, architecture §14.1). Seats at existing tables keep the old name.
+ * Changes the display name. Names are filtered (offensive names are refused), unique
+ * (architecture §14.1) and rate-limited. Seats at existing tables keep the old name.
  */
 export const rename = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
     const user = await requireUser(ctx);
-    const accepted = acceptName(name); // a refused name doesn't count against the limit
+    // A refused name doesn't count against the limit.
+    const accepted = acceptName(name);
+    if (await nameTaken(ctx, accepted, user._id)) throw new TableError('NAME_TAKEN');
     const check = renameCheck(user.renameTimes ?? [], Date.now());
     if (!check.ok) throw new TableError('RENAME_TOO_SOON');
-    await ctx.db.patch(user._id, { name: accepted, renameTimes: check.times });
+    await ctx.db.patch(user._id, { name: accepted, nameKey: nameKey(accepted), renameTimes: check.times });
+  },
+});
+
+/**
+ * A free variant of a taken name ("Ana" → "Ana 2"), or null when the name is free. Public, so
+ * the sign-in dialog can offer it; it reveals no more than the names shown at tables.
+ */
+export const suggestName = query({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    let clean: string;
+    try {
+      clean = cleanName(name);
+    } catch {
+      return null;
+    }
+    if (!(await nameTaken(ctx, clean))) return null;
+    return freeName(ctx, clean).catch(() => null);
+  },
+});
+
+/**
+ * One-off, from the Convex dashboard (Functions → users:backfillNameKeys → Run), repeated with
+ * the returned `cursor` until `isDone`: gives players from before unique names their key. The
+ * earliest holder of a name keeps it; later ones get the first free variant ("Ana 2").
+ * Bots, test accounts, deleted accounts and admin-reset names stay without a key.
+ */
+export const backfillNameKeys = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db
+      .query('users')
+      .withIndex('by_name_key', (q) => q.eq('nameKey', undefined))
+      .paginate({ cursor: cursor ?? null, numItems: 200 });
+    let updated = 0;
+    let renamed = 0;
+    for (const user of page.page) {
+      if (!user.name || user.isBot || user.isTest || user.deletedAt !== undefined) continue;
+      if (isReservedName(user.name)) continue;
+      const name = await freeName(ctx, user.name, user._id);
+      await ctx.db.patch(user._id, { name, nameKey: nameKey(name) });
+      updated++;
+      if (name !== user.name) renamed++;
+    }
+    return { updated, renamed, isDone: page.isDone, cursor: page.continueCursor };
   },
 });
 
