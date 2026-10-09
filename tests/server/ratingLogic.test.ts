@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ratedBlocker, settleMatch } from '../../convex/lib/ratingLogic';
+import { gainsByOpponent, ratedBlocker, settleMatch } from '../../convex/lib/ratingLogic';
 import { emptySeats, fillWithBots, type Seat } from '../../convex/lib/tableLogic';
-import { newRating } from '../../src/ratings/ratings';
+import { displayRating, newRating } from '../../src/ratings/ratings';
 
 const human = (userId: string): Seat => ({ kind: 'user', userId: userId as never, name: userId });
 const four = ['a', 'b', 'c', 'd'];
@@ -36,6 +36,41 @@ describe('settleMatch', () => {
     expect(r.updates.b.mu).toBeGreaterThan(newRating().mu); // opponents win
     expect(r.updates.c).toBeUndefined();
     expect(r.entries.map((e) => e.playerId)).not.toContain('c');
+  });
+});
+
+describe('per-opponent daily gain cap (win-trading, architecture §9.1)', () => {
+  const gain = (r: ReturnType<typeof settleMatch>, id: string) => displayRating(r.updates[id]) - displayRating(newRating());
+
+  it('a winner gains nothing more off an opponent they already took the whole cap from today', () => {
+    const r = settleMatch({ ...base, gainCap: 4, gainedToday: { a: { b: 4 } } });
+    expect(gain(r, 'a')).toBeCloseTo(0, 6);
+    expect(gain(r, 'c')).toBeGreaterThan(2); // partner c has no history against b or d
+    expect(r.updates.a.gamesPlayed).toBe(1); // the game still counts
+  });
+
+  it('the remaining room is what is left against the opponent they gained most from', () => {
+    const r = settleMatch({ ...base, gainCap: 4, gainedToday: { a: { b: 1, d: 3 } } });
+    expect(gain(r, 'a')).toBeCloseTo(1, 6);
+  });
+
+  it('never touches losses', () => {
+    const free = settleMatch(base);
+    const capped = settleMatch({ ...base, gainCap: 4, gainedToday: { b: { a: 9 }, d: { c: 9 } } });
+    expect(capped.updates.b).toEqual(free.updates.b);
+    expect(capped.updates.d).toEqual(free.updates.d);
+  });
+});
+
+describe('gainsByOpponent', () => {
+  it('sums one player’s positive rating changes per opponent over their recent games', () => {
+    const games = [
+      { players: ['a', 'b', 'c', 'd'], delta: 2 }, // a sat at seat 0: opponents b, d
+      { players: ['b', 'a', 'd', 'e'], delta: 1.5 }, // seat 1: opponents b, d
+      { players: ['a', 'b', 'c', 'd'], delta: -2 }, // a loss takes nothing back
+      { players: ['x', 'a', 'y', 'z'], delta: 1 }, // opponents x, y
+    ];
+    expect(gainsByOpponent('a', games)).toEqual({ b: 3.5, d: 3.5, x: 1, y: 1 });
   });
 });
 

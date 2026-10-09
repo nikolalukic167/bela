@@ -5,6 +5,7 @@ import { internal } from './_generated/api';
 import { optionsValidator } from './schema';
 import { requireUser } from './lib/auth';
 import {
+  ACT_LIMIT,
   AUTO_DELAY_MS,
   BOT_DELAY_MS,
   FAST_BATCH,
@@ -14,6 +15,7 @@ import {
   STALE_TABLE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
+import { consume } from './lib/rateLimit';
 import {
   advance,
   applyHumanAction,
@@ -444,6 +446,8 @@ export const cleanup = internalMutation({
       .query('tables')
       .withIndex('by_status', (q) => q.eq('status', 'playing').lte('createdAt', now - STALE_TABLE_MS))
       .take(200);
+    // Token buckets idle for a day are full again anyway.
+    for (const r of await ctx.db.query('rateLimits').withIndex('by_at', (q) => q.lte('at', now - STALE_TABLE_MS)).take(500)) await ctx.db.delete(r._id);
     for (const t of [...lobbies, ...running]) {
       const row = t.status === 'playing' ? await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', t._id)).unique() : null;
       if (isAbandoned({ status: t.status, seats: t.seats as Seat[], createdAt: t.createdAt, lastMoveAt: row?.lastMoveAt ?? null }, now)) {
@@ -465,6 +469,7 @@ export const act = mutation({
     // The seat comes from the table, never from the request (architecture §9.1).
     const seat = seatOf(table.seats as Seat[], user._id);
     if (seat < 0) throw new TableError('FORBIDDEN');
+    await consume(ctx, `act:${table._id}:${user._id}`, ACT_LIMIT);
     const row = await loadState(ctx, table._id);
     const state = applyHumanAction(row.state as BelaState, seat, action as BelaAction);
     await commit(ctx, table, row, state, [{ seat, action: action as BelaAction }]);

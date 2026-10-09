@@ -142,6 +142,15 @@ export default defineSchema({
     at: v.number(),
   }).index('by_user', ['userId', 'at']),
 
+  // Token buckets (lib/rateLimit.ts), keyed e.g. `act:<tableId>:<userId>`. The daily cleanup drops idle ones.
+  rateLimits: defineTable({
+    key: v.string(),
+    tokens: v.number(),
+    at: v.number(),
+  })
+    .index('by_key', ['key'])
+    .index('by_at', ['at']),
+
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({
     userId: v.id('users'),

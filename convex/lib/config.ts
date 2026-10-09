@@ -17,6 +17,20 @@ export const NEXT_HAND_TIMEOUT_MS = 30_000;
 export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
 /** Rated games a player needs before appearing on the public leaderboard (architecture §9.1). */
 export const LEADERBOARD_MIN_GAMES = 10;
+/** ...and an account at least this old, so a farm of fresh accounts can't fill the board (§9.1). */
+export const LEADERBOARD_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Most display rating one player can gain off any single opponent in DAILY_GAIN_WINDOW_MS
+ * (win-trading, §9.1). A new player's first win is worth about 2.4 points, so this is roughly
+ * two honest wins against the same person per day; a rotating-partner farm hits it fast.
+ */
+export const DAILY_GAIN_CAP = 4;
+export const DAILY_GAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+/**
+ * Token bucket for `tables.act` per user per table: a burst of 10, then one move per 250 ms.
+ * A human never plays that fast; a script hammering the table gets RATE_LIMITED.
+ */
+export const ACT_LIMIT = { burst: 10, refillMs: 250 };
 export const LEADERBOARD_SIZE = 50;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
 export const MAX_NAME_LENGTH = 24;
