@@ -62,7 +62,9 @@ describe('bot matches and test data', () => {
     expect(w?.spectating).toBe(true);
     expect(Math.max(...w!.result!.scores)).toBeGreaterThanOrEqual(501);
     const log = await t.run((ctx) => ctx.db.query('actions').collect());
-    expect(log.length).toBeGreaterThan(100);
+    // At least two whole hands (one hand can't reach 501), each 32 cards played and 8 tricks collected.
+    // A fixed 100 failed now and then: a lucky deal ends a 501 match in under 100 moves.
+    expect(log.length).toBeGreaterThanOrEqual(2 * (32 + 8));
     expect(log.map((a) => a.seq)).toEqual(log.map((_, i) => i));
   });
 
