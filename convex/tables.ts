@@ -2,18 +2,24 @@ import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
-import { optionsValidator } from './schema';
+import { optionsValidator, timerProfileValidator } from './schema';
 import { requireUser } from './lib/auth';
 import {
+  ACT_LIMIT,
   AUTO_DELAY_MS,
   BOT_DELAY_MS,
   FAST_BATCH,
+  INVITE_TTL_MS,
+  LOOKUP_LIMIT,
   MAX_ACTIVE_TABLES_PER_USER,
   NEXT_HAND_DELAY_MS,
-  RECONNECT_GRACE_MS,
+  TIMER_PROFILES,
   STALE_TABLE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
+import { consume } from './lib/rateLimit';
+import { flagOn } from './lib/flags';
+import { logEvent } from './lib/log';
 import {
   advance,
   applyHumanAction,
@@ -70,6 +76,18 @@ export async function tableByCode(ctx: QueryCtx, code: string): Promise<Doc<'tab
   return ctx.db.query('tables').withIndex('by_code', (q) => q.eq('code', code.trim().toUpperCase())).unique();
 }
 
+/**
+ * The table a signed-in caller means by `code`: the current code, or a code the host revoked
+ * if the caller is seated there (their open page still uses it). Null if hidden from them.
+ */
+export async function findTable(ctx: QueryCtx, code: string, user: Doc<'users'>): Promise<Doc<'tables'> | null> {
+  const current = await tableByCode(ctx, code);
+  if (current) return visibleTo(current, user) ? current : null;
+  const retired = await ctx.db.query('retiredCodes').withIndex('by_code', (q) => q.eq('code', code.trim().toUpperCase())).first();
+  const table = retired ? await ctx.db.get(retired.tableId) : null;
+  return table && visibleTo(table, user) && ownSeat(table.seats as Seat[], user._id) >= 0 ? table : null;
+}
+
 /** Test tables exist only for admins; everyone else gets NOT_FOUND, as if they were not there. */
 export function visibleTo(table: Doc<'tables'>, user: Doc<'users'>): boolean {
   return !table.isTest || user.isAdmin === true;
@@ -84,19 +102,22 @@ export async function loadState(ctx: QueryCtx, tableId: Id<'tables'>): Promise<D
 export async function uniqueCode(ctx: QueryCtx): Promise<string> {
   for (let i = 0; i < 20; i++) {
     const code = makeCode(randomInt);
-    if (!(await tableByCode(ctx, code))) return code;
+    const retired = await ctx.db.query('retiredCodes').withIndex('by_code', (q) => q.eq('code', code)).first();
+    if (!(await tableByCode(ctx, code)) && !retired) return code;
   }
   throw new TableError('RATE_LIMITED');
 }
 
 const botLevelOf = (t: Doc<'tables'>): ServerBotLevel => (t.options.botLevel ?? 'medium') as ServerBotLevel;
+/** The table's clock (architecture §14.3); tables from before profiles run on 'normal'. */
+const timersOf = (t: Doc<'tables'>) => TIMER_PROFILES[t.timerProfile ?? 'normal'];
 
 /** Schedules the server's next step (bot move, trick collection) if there is one. */
 export async function scheduleNext(ctx: MutationCtx, table: Doc<'tables'>, row: Doc<'tableStates'>) {
   const m = moverOf(row.state as BelaState, table.seats as Seat[]);
   if (m.kind === 'none') {
     // Waiting on the humans: start the turn timer (a later move makes it a no-op).
-    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[]);
+    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[], timersOf(table));
     await ctx.db.patch(row._id, { deadline: timer ? Date.now() + timer.ms : undefined });
     if (timer) await ctx.scheduler.runAfter(timer.ms, internal.tables.timeout, { tableId: table._id, version: row.version });
     return;
@@ -148,9 +169,10 @@ async function activeTableCount(ctx: QueryCtx, userId: Id<'users'>): Promise<num
 // ---------- lobby ----------
 
 export const create = mutation({
-  args: { options: optionsValidator, rated: v.optional(v.boolean()) },
-  handler: async (ctx, { options, rated }) => {
+  args: { options: optionsValidator, rated: v.optional(v.boolean()), timerProfile: v.optional(timerProfileValidator) },
+  handler: async (ctx, { options, rated, timerProfile }) => {
     const user = await requireUser(ctx);
+    if (rated && !(await flagOn(ctx, 'ratings'))) throw new TableError('FEATURE_OFF');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
     const seats = emptySeats();
     seats[0] = { kind: 'user', userId: user._id, name: user.name ?? 'Igrač' };
@@ -160,26 +182,38 @@ export const create = mutation({
       hostId: user._id,
       options: { ...options, botLevel: options.botLevel ?? 'medium' },
       rated: rated === true,
+      timerProfile: timerProfile ?? 'normal',
       status: 'lobby',
       seats,
       isTest: false,
       speed: 'live',
       createdAt: Date.now(),
+      codeExpiresAt: Date.now() + INVITE_TTL_MS,
     });
     await ctx.db.insert('memberships', { userId: user._id, tableId });
+    logEvent('table.created', { tableId, rated: rated === true, timerProfile: timerProfile ?? 'normal' });
     return code;
   },
 });
 
+/**
+ * Takes a free seat. Returns the table's code, or null for an unknown code: that answer is a
+ * value, not an error, so the spent lookup token is saved (a thrown error would roll it back)
+ * and guessing codes is rate-limited (§9.3).
+ */
 export const join = mutation({
   args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  handler: async (ctx, { code }): Promise<string | null> => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    const table = await findTable(ctx, code, user);
+    if (!table) {
+      await consume(ctx, `lookup:${user._id}`, LOOKUP_LIMIT);
+      return null;
+    }
     const seats = table.seats as Seat[];
     if (ownSeat(seats, user._id) >= 0) return table.code; // idempotent: rejoining restores the seat
     if (table.status !== 'lobby') throw new TableError('WRONG_STATE');
+    if (table.codeExpiresAt !== undefined && Date.now() > table.codeExpiresAt) throw new TableError('CODE_EXPIRED');
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
@@ -192,8 +226,8 @@ export const join = mutation({
 
 async function hostTable(ctx: MutationCtx, code: string) {
   const user = await requireUser(ctx);
-  const table = await tableByCode(ctx, code);
-  if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+  const table = await findTable(ctx, code, user);
+  if (!table) throw new TableError('NOT_FOUND');
   if (table.hostId !== user._id) throw new TableError('FORBIDDEN');
   if (table.status !== 'lobby') throw new TableError('WRONG_STATE');
   return { user, table };
@@ -229,6 +263,22 @@ export const clearSeat = mutation({
   },
 });
 
+/**
+ * The host revokes the invite code and gets a new one with a fresh expiry (§9.3). Seated players
+ * keep reaching the table through the old code; for everyone else it no longer exists.
+ */
+export const newCode = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const { table } = await hostTable(ctx, code);
+    const next = await uniqueCode(ctx);
+    await ctx.db.insert('retiredCodes', { code: table.code, tableId: table._id });
+    await ctx.db.patch(table._id, { code: next, codeExpiresAt: Date.now() + INVITE_TTL_MS });
+    logEvent('table.codeReplaced', { tableId: table._id });
+    return next;
+  },
+});
+
 async function dropMembership(ctx: MutationCtx, userId: Id<'users'>, tableId: Id<'tables'>) {
   const rows = await ctx.db.query('memberships').withIndex('by_user', (q) => q.eq('userId', userId)).collect();
   for (const r of rows) if (r.tableId === tableId) await ctx.db.delete(r._id);
@@ -239,6 +289,7 @@ async function deleteTable(ctx: MutationCtx, tableId: Id<'tables'>) {
   for (const p of await ctx.db.query('presence').withIndex('by_table_user', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(p._id);
   for (const s of await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(s._id);
   for (const a of await ctx.db.query('actions').withIndex('by_table_seq', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(a._id);
+  for (const r of await ctx.db.query('retiredCodes').withIndex('by_table', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(r._id);
   await ctx.db.delete(tableId);
 }
 export { deleteTable };
@@ -251,8 +302,8 @@ export const leave = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    const table = await findTable(ctx, code, user);
+    if (!table) throw new TableError('NOT_FOUND');
     const seats = table.seats as Seat[];
     const seat = ownSeat(seats, user._id);
     if (seat < 0) return;
@@ -299,7 +350,8 @@ export const start = mutation({
     await ctx.db.patch(table._id, { seats, status: 'playing' });
     const rowId = await ctx.db.insert('tableStates', { tableId: table._id, state, version: 0 });
     const row = (await ctx.db.get(rowId))!;
-    for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table._id, s.userId);
+    for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table, s.userId);
+    logEvent('table.started', { tableId: table._id, rated: table.rated === true, count: seats.filter((s) => s.kind === 'user').length });
     await scheduleNext(ctx, { ...table, seats, status: 'playing' } as Doc<'tables'>, row);
   },
 });
@@ -316,14 +368,15 @@ async function dropPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<
 }
 
 /** Records a heartbeat. A new row starts the presence-check chain for this seat. */
-async function touchPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<'users'>) {
+async function touchPresence(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users'>) {
+  const tableId = table._id;
   const row = await presenceRow(ctx, tableId, userId);
   if (row) {
     await ctx.db.patch(row._id, { lastSeen: Date.now() });
     return;
   }
   const presenceId = await ctx.db.insert('presence', { tableId, userId, lastSeen: Date.now() });
-  await ctx.scheduler.runAfter(RECONNECT_GRACE_MS, internal.tables.checkPresence, { presenceId });
+  await ctx.scheduler.runAfter(timersOf(table).graceMs, internal.tables.checkPresence, { presenceId });
 }
 
 /**
@@ -334,17 +387,18 @@ export const heartbeat = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user) || table.status !== 'playing') return;
+    const table = await findTable(ctx, code, user);
+    if (!table || table.status !== 'playing') return;
     const back = reclaimSeat(table.seats as Seat[], user._id);
     if (back) {
       await ctx.db.patch(table._id, { seats: back.seats });
+      logEvent('seat.reclaimed', { tableId: table._id, seat: back.seat });
       // A table that waited for its players moves again; a pending stand-in step for this seat becomes a no-op.
       await scheduleNext(ctx, { ...table, seats: back.seats } as Doc<'tables'>, await loadState(ctx, table._id));
     } else if (seatOf(table.seats as Seat[], user._id) < 0) {
       return;
     }
-    await touchPresence(ctx, table._id, user._id);
+    await touchPresence(ctx, table, user._id);
   },
 });
 
@@ -363,7 +417,7 @@ export const checkPresence = internalMutation({
       await ctx.db.delete(row._id);
       return;
     }
-    const verdict = presenceCheck(row.lastSeen, Date.now(), RECONNECT_GRACE_MS);
+    const verdict = presenceCheck(row.lastSeen, Date.now(), timersOf(table).graceMs);
     if (!verdict.expired) {
       await ctx.scheduler.runAt(verdict.recheckAt, internal.tables.checkPresence, { presenceId });
       return;
@@ -375,6 +429,7 @@ export const checkPresence = internalMutation({
     }
     const seats = standIn(table.seats as Seat[], seat, botLevelOf(table));
     await ctx.db.patch(table._id, { seats });
+    logEvent('seat.standIn', { tableId: table._id, seat });
     await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, await loadState(ctx, table._id));
   },
 });
@@ -399,12 +454,13 @@ export const rematch = mutation({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    const table = await findTable(ctx, code, user);
+    if (!table) throw new TableError('NOT_FOUND');
     if (ownSeat(table.seats as Seat[], user._id) < 0) throw new TableError('FORBIDDEN');
     if (table.status !== 'finished') throw new TableError('WRONG_STATE');
+    if (!(await flagOn(ctx, 'rematch'))) throw new TableError('FEATURE_OFF');
     if (table.rematchCode) {
-      const existing = await tableByCode(ctx, table.rematchCode);
+      const existing = await findTable(ctx, table.rematchCode, user);
       if (existing) return existing.code;
     }
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
@@ -424,7 +480,9 @@ export const rematch = mutation({
       isTest: table.isTest,
       speed: table.speed,
       rated: table.rated,
+      timerProfile: table.timerProfile,
       createdAt: Date.now(),
+      codeExpiresAt: Date.now() + INVITE_TTL_MS,
     });
     for (const s of seats) if (s.kind === 'user') await ctx.db.insert('memberships', { userId: s.userId, tableId });
     await ctx.db.patch(table._id, { rematchCode: next });
@@ -445,12 +503,17 @@ export const cleanup = internalMutation({
       .query('tables')
       .withIndex('by_status', (q) => q.eq('status', 'playing').lte('createdAt', now - STALE_TABLE_MS))
       .take(200);
+    // Token buckets idle for a day are full again anyway.
+    for (const r of await ctx.db.query('rateLimits').withIndex('by_at', (q) => q.lte('at', now - STALE_TABLE_MS)).take(500)) await ctx.db.delete(r._id);
+    let deleted = 0;
     for (const t of [...lobbies, ...running]) {
       const row = t.status === 'playing' ? await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', t._id)).unique() : null;
       if (isAbandoned({ status: t.status, seats: t.seats as Seat[], createdAt: t.createdAt, lastMoveAt: row?.lastMoveAt ?? null }, now)) {
         await deleteTable(ctx, t._id);
+        deleted++;
       }
     }
+    logEvent('cleanup.done', { count: deleted });
   },
 });
 
@@ -460,12 +523,13 @@ export const act = mutation({
   args: { code: v.string(), action: actionValidator },
   handler: async (ctx, { code, action }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
+    const table = await findTable(ctx, code, user);
+    if (!table) throw new TableError('NOT_FOUND');
     if (table.status !== 'playing') throw new TableError('WRONG_STATE');
     // The seat comes from the table, never from the request (architecture §9.1).
     const seat = seatOf(table.seats as Seat[], user._id);
     if (seat < 0) throw new TableError('FORBIDDEN');
+    await consume(ctx, `act:${table._id}:${user._id}`, ACT_LIMIT);
     const row = await loadState(ctx, table._id);
     const state = applyHumanAction(row.state as BelaState, seat, action as BelaAction);
     await commit(ctx, table, row, state, [{ seat, action: action as BelaAction }]);
@@ -493,7 +557,7 @@ export const timeout = internalMutation({
     if (!table || table.status !== 'playing') return;
     const row = await loadState(ctx, tableId);
     if (row.version !== version) return;
-    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version);
+    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version, timersOf(table));
     if (move) await commit(ctx, table, row, belaGame.apply(row.state as BelaState, move.action), [move]);
   },
 });
@@ -519,17 +583,20 @@ export const watch = query({
   args: { code: v.string() },
   handler: async (ctx, { code }) => {
     const user = await requireUser(ctx);
-    const table = await tableByCode(ctx, code);
-    if (!table || !visibleTo(table, user)) return null;
+    const table = await findTable(ctx, code, user);
+    if (!table) return null;
     const seats = table.seats as Seat[];
     // An away player still sees their seat, so the page doesn't flicker while the heartbeat reclaims it.
     const mySeat = ownSeat(seats, user._id);
     let view = null;
     let spectating = false;
     let deadline: number | null = null;
+    let seed: number | null = null;
     if (table.status !== 'lobby') {
       const row = await loadState(ctx, table._id);
       deadline = table.status === 'playing' ? (row.deadline ?? null) : null;
+      // Revealed only once the match is over, so anyone can replay and verify the deal (§9.1).
+      if (table.status === 'finished') seed = (row.state as BelaState).seed;
       // Admins may watch bot-only test tables (never real ones) from seat 0.
       spectating = mySeat < 0 && table.isTest && user.isAdmin === true;
       if (mySeat >= 0 || spectating) view = viewFor(row.state as BelaState, Math.max(mySeat, 0));
@@ -548,6 +615,11 @@ export const watch = query({
       deadline,
       rematchCode: table.rematchCode ?? null,
       rated: table.rated === true,
+      /** When the invite stops admitting new players (null: never, tables from before expiry). */
+      codeExpiresAt: table.codeExpiresAt ?? null,
+      /** The deck seed: null until the match is finished. With `options` and the action log it replays the game. */
+      seed,
+      timerProfile: table.timerProfile ?? 'normal',
     };
   },
 });

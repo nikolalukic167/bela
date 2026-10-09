@@ -30,7 +30,7 @@ export const send = mutation({
   args: { code: v.string(), phrase: v.optional(v.string()), text: v.optional(v.string()) },
   handler: async (ctx, { code, phrase, text }) => {
     const { user, table, seat } = await memberOf(ctx, code);
-    if (!(await chatEnabled(ctx))) throw new TableError('FORBIDDEN');
+    if (!(await chatEnabled(ctx))) throw new TableError('FEATURE_OFF');
     if ((phrase === undefined) === (text === undefined)) throw new TableError('INVALID_INPUT');
     let entry: { phrase: string } | { text: string };
     if (phrase !== undefined) {

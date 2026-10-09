@@ -1,8 +1,9 @@
 // Who may chat and whom a viewer hears. These are seams for the other workstreams:
-// block/mute is owned by accounts/safety (nikolalukic167/bela#21), the `chat` feature
-// flag by ops (nikolalukic167/bela#10). Wire them up once those are on main.
+// block/mute is owned by accounts/safety (nikolalukic167/bela#21, wire up once on main),
+// the `chat` feature flag by ops (lib/flags.ts).
 import type { Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
+import { flagOn } from './flags';
 
 /**
  * Users whose messages `viewer` must not see. Muting is per viewer: the sender is never
@@ -13,10 +14,5 @@ export async function mutedBy(_ctx: QueryCtx, _viewer: Id<'users'>): Promise<Set
   return new Set();
 }
 
-/**
- * TODO(#10): read the `chat` flag from the `config` table the way `convex/flags.ts` does, and
- * have `chat.send` throw `FEATURE_OFF` (instead of FORBIDDEN) when it is off.
- */
-export async function chatEnabled(_ctx: QueryCtx): Promise<boolean> {
-  return true;
-}
+/** The `chat` feature flag (architecture §12); a missing row means on. */
+export const chatEnabled = (ctx: QueryCtx): Promise<boolean> => flagOn(ctx, 'chat');

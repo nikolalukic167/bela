@@ -74,4 +74,12 @@ describe('chat', () => {
     await t.mutation(internal.chat.purge, {});
     expect(await t.run(async (ctx) => (await ctx.db.query('chat').collect()).length)).toBe(0);
   });
+
+  it('is switched off by the chat feature flag: sending fails with FEATURE_OFF, reading returns nothing', async () => {
+    const { t, ana, bruno, code } = await lobby();
+    await ana.as.mutation(api.chat.send, { code, phrase: 'hello' });
+    await t.run((ctx) => ctx.db.insert('config', { key: 'chat', on: false }));
+    expect(await errCode(ana.as.mutation(api.chat.send, { code, phrase: 'hello' }))).toBe('FEATURE_OFF');
+    expect(await bruno.as.query(api.chat.list, { code })).toEqual([]);
+  });
 });

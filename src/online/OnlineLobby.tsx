@@ -2,6 +2,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
+import { CODE_LENGTH, TIMER_PROFILES, type TimerProfileName } from '../../convex/lib/config';
 import { belaGame } from '../games/bela/game';
 import { NewGameDialog } from '../games/bela/ui/NewGameDialog';
 import type { BelaOptions } from '../games/bela/state';
@@ -13,6 +14,7 @@ import { OnlineGate } from './OnlineGate';
 /** Bot levels the server can afford inside a mutation (expert is offline-only). */
 const ONLINE_LEVELS = ['easy', 'medium', 'hard'] as const;
 const DEFAULTS: BelaOptions = { ...belaGame.defaultOptions, target: 501 };
+const TIMER_CHOICES: TimerProfileName[] = ['relaxed', 'normal', 'quick'];
 
 export function OnlineLobbyPage() {
   return (
@@ -26,10 +28,13 @@ function OnlineLobby() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const tables = useQuery(api.tables.mine, {});
+  const flags = useQuery(api.flags.list, {});
+  const ratingsOn = flags?.ratings !== false;
   const create = useMutation(api.tables.create);
   const join = useMutation(api.tables.join);
   const [creating, setCreating] = useState(false);
   const [rated, setRated] = useState(false);
+  const [timerProfile, setTimerProfile] = useState<TimerProfileName>('normal');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +45,7 @@ function OnlineLobby() {
     setError(null);
     try {
       const botLevel = o.botLevel === 'expert' ? 'hard' : o.botLevel;
-      const created = await create({ options: { ...o, botLevel }, rated });
+      const created = await create({ options: { ...o, botLevel }, rated: rated && ratingsOn, timerProfile });
       navigate(`/t/${created}`);
     } catch (e) {
       fail(e);
@@ -51,7 +56,9 @@ function OnlineLobby() {
     e.preventDefault();
     setError(null);
     try {
-      navigate(`/t/${await join({ code })}`);
+      const found = await join({ code });
+      if (found === null) setError(t('err.NOT_FOUND'));
+      else navigate(`/t/${found}`);
     } catch (err) {
       fail(err);
     }
@@ -70,10 +77,22 @@ function OnlineLobby() {
           <section className="card bg-base-200 shadow-md">
             <div className="card-body">
               <h2 className="card-title">{t('online.create')}</h2>
-              <p className="opacity-70 text-sm">{t(rated ? 'online.ratedHint' : 'online.startHint')}</p>
-              <label className="label cursor-pointer gap-2 text-base-content">
-                <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
-                {t('online.rated')}
+              <p className="opacity-70 text-sm">{t(rated && ratingsOn ? 'online.ratedHint' : 'online.startHint')}</p>
+              {ratingsOn && (
+                <label className="label cursor-pointer gap-2 text-base-content">
+                  <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
+                  {t('online.rated')}
+                </label>
+              )}
+              <label className="fieldset py-0">
+                <span className="fieldset-legend">{t('online.timer')}</span>
+                <select className="select select-sm" value={timerProfile} onChange={(e) => setTimerProfile(e.target.value as TimerProfileName)}>
+                  {TIMER_CHOICES.map((p) => (
+                    <option key={p} value={p}>
+                      {t(`online.timer.${p}`)} · {TIMER_PROFILES[p].turnMs / 1000} s
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="card-actions">
                 <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -90,7 +109,7 @@ function OnlineLobby() {
                 aria-label={t('online.codeLabel')}
                 placeholder={t('online.codeLabel')}
                 value={code}
-                maxLength={6}
+                maxLength={CODE_LENGTH}
                 autoCapitalize="characters"
                 onChange={(e) => setCode(e.target.value)}
               />

@@ -6,7 +6,7 @@ import { createRng } from '../../src/core/rng';
 import { belaGame } from '../../src/games/bela/game';
 import type { BelaAction, BelaOptions, BelaState } from '../../src/games/bela/state';
 import { viewFor, type SeatView } from '../../src/games/bela/view';
-import { CODE_ALPHABET, CODE_LENGTH, NEXT_HAND_TIMEOUT_MS, STALE_TABLE_MS, TURN_TIMEOUT_MS } from './config';
+import { CODE_ALPHABET, CODE_LENGTH, STALE_TABLE_MS, TIMER_PROFILES, type TimerProfile } from './config';
 import { TableError } from './errors';
 
 export type ServerBotLevel = 'easy' | 'medium' | 'hard';
@@ -60,7 +60,7 @@ export function fillWithBots(seats: Seat[], level: ServerBotLevel): Seat[] {
 
 /**
  * Reconnect (architecture §7): a seat is kept while its player's last heartbeat is
- * within `grace`. After that a bot stands in until they come back.
+ * within `grace` (the table's timer profile, `graceMs`). After that a bot stands in until they come back.
  */
 export function presenceCheck(lastSeen: number, now: number, grace: number): { expired: true } | { expired: false; recheckAt: number } {
   return now - lastSeen >= grace ? { expired: true } : { expired: false, recheckAt: lastSeen + grace };
@@ -115,16 +115,20 @@ export function moverOf(state: BelaState, seats: Seat[]): Mover {
  * The turn timer while the table waits on its humans: the seat to move (null: anyone may
  * press "next") and how long they have. Null when the server moves by itself or the match is over.
  */
-export function timeoutFor(state: BelaState, seats: Seat[]): { seat: number | null; ms: number } | null {
+export function timeoutFor(
+  state: BelaState,
+  seats: Seat[],
+  profile: TimerProfile = TIMER_PROFILES.normal,
+): { seat: number | null; ms: number } | null {
   if (moverOf(state, seats).kind !== 'none' || belaGame.isOver(state)) return null;
-  if (state.phase === 'handOver') return humanCount(seats) > 0 ? { seat: null, ms: NEXT_HAND_TIMEOUT_MS } : null;
+  if (state.phase === 'handOver') return humanCount(seats) > 0 ? { seat: null, ms: profile.nextHandMs } : null;
   const turn = belaGame.currentPlayer(state);
-  return turn !== null && seats[turn]?.kind === 'user' ? { seat: turn, ms: TURN_TIMEOUT_MS } : null;
+  return turn !== null && seats[turn]?.kind === 'user' ? { seat: turn, ms: profile.turnMs } : null;
 }
 
 /** What the server plays when the timer runs out: the next deal, or a medium bot's move for the seat. */
-export function timeoutMove(state: BelaState, seats: Seat[], version: number): Move | null {
-  const t = timeoutFor(state, seats);
+export function timeoutMove(state: BelaState, seats: Seat[], version: number, profile: TimerProfile = TIMER_PROFILES.normal): Move | null {
+  const t = timeoutFor(state, seats, profile);
   if (!t) return null;
   if (t.seat === null) return { seat: belaGame.currentPlayer(state) ?? 0, action: { type: 'next' } };
   return { seat: t.seat, action: botAction(state, t.seat, 'medium', state.seed ^ Math.imul(version + 1, 2654435761)) };

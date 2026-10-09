@@ -126,7 +126,7 @@ describe('bot matches and test data', () => {
     await settleFastMatches(t);
     for (const c of Object.values(codes)) {
       expect(await real.as.query(api.tables.watch, { code: c })).toBeNull();
-      await failsWith(real.as.mutation(api.tables.join, { code: c }), 'NOT_FOUND');
+      expect(await real.as.mutation(api.tables.join, { code: c })).toBeNull(); // same answer as an unknown code
       await failsWith(real.as.mutation(api.tables.act, { code: c, action: { type: 'pass' } }), 'NOT_FOUND');
     }
     expect(await real.as.query(api.tables.mine, {})).toEqual([]);

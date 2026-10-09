@@ -1,8 +1,10 @@
 import type { Doc, Id } from './_generated/dataModel';
 import { query, type MutationCtx } from './_generated/server';
 import { requireUser } from './lib/auth';
-import { LEADERBOARD_MIN_GAMES, LEADERBOARD_SIZE } from './lib/config';
-import { quartetKey, settleMatch } from './lib/ratingLogic';
+import { DAILY_GAIN_CAP, DAILY_GAIN_WINDOW_MS, LEADERBOARD_MIN_AGE_MS, LEADERBOARD_MIN_GAMES, LEADERBOARD_SIZE } from './lib/config';
+import { gainsByOpponent, quartetKey, settleMatch } from './lib/ratingLogic';
+import { flagOn } from './lib/flags';
+import { logEvent } from './lib/log';
 import type { Seat } from './lib/tableLogic';
 import type { HandLine } from '../src/games/bela/stats';
 import { DEFAULT_CONFIG, displayRating, isProvisional, newRating, type PlayerRating, type RatingBook } from '../src/ratings/ratings';
@@ -37,8 +39,10 @@ export async function recordGame(
     hands,
   };
   const ids = players.filter((p): p is Id<'users'> => p !== null);
-  if (!table.rated || ids.length !== 4) {
-    await ctx.db.insert('games', { ...base, rated: false });
+  // With the ratings flag off (a kill switch, architecture §12) even a rated table's result changes no rating.
+  if (!table.rated || ids.length !== 4 || !(await flagOn(ctx, 'ratings'))) {
+    const gameId = await ctx.db.insert('games', { ...base, rated: false });
+    logEvent('game.finished', { tableId: table._id, gameId, rated: false, endReason: base.endReason });
     return;
   }
 
@@ -49,6 +53,8 @@ export async function recordGame(
     .collect();
   const rows = new Map<string, Doc<'ratings'> | null>();
   for (const id of ids) rows.set(id, await ratingRow(ctx, id));
+  const gainedToday: Record<string, Record<string, number>> = {};
+  for (const id of ids) gainedToday[id] = await recentGains(ctx, id, now);
   const current: RatingBook = Object.fromEntries([...rows].flatMap(([id, r]) => (r ? [[id, toRating(r)]] : [])));
   const settled = settleMatch({
     players: ids,
@@ -58,8 +64,11 @@ export async function recordGame(
     current,
     recentQuartetGames: recent.filter((g) => g.rated).length,
     abandonedBy: result.abandonedBy,
+    gainCap: DAILY_GAIN_CAP,
+    gainedToday,
   });
   const gameId = await ctx.db.insert('games', { ...base, rated: settled.rated, quartetKey: key });
+  logEvent('game.finished', { tableId: table._id, gameId, rated: settled.rated, endReason: base.endReason });
   for (const [id, r] of Object.entries(settled.updates)) {
     const userId = id as Id<'users'>;
     const before = displayRating(current[id] ?? newRating());
@@ -72,7 +81,25 @@ export async function recordGame(
   }
 }
 
-/** Public (architecture §9.2): established players only, by name; no ids or emails. */
+/** What `userId` gained off each opponent inside the daily window (for the win-trading cap). */
+async function recentGains(ctx: MutationCtx, userId: Id<'users'>, now: number) {
+  const points = await ctx.db
+    .query('ratingHistory')
+    .withIndex('by_user', (q) => q.eq('userId', userId).gt('at', now - DAILY_GAIN_WINDOW_MS))
+    .collect();
+  const games = [];
+  for (const h of points) {
+    if (h.delta <= 0) continue;
+    const g = await ctx.db.get(h.gameId);
+    if (g) games.push({ players: g.players, delta: h.delta });
+  }
+  return gainsByOpponent(userId, games);
+}
+
+/**
+ * Public (architecture §9.2): established players only (LEADERBOARD_MIN_GAMES rated games and an
+ * account LEADERBOARD_MIN_AGE_MS old), by name; no ids or emails.
+ */
 export const leaderboard = query({
   args: {},
   handler: async (ctx) => {
@@ -81,7 +108,7 @@ export const leaderboard = query({
     for (const r of rows) {
       if (r.gamesPlayed < LEADERBOARD_MIN_GAMES) continue;
       const user = await ctx.db.get(r.userId);
-      if (!user || user.isTest) continue;
+      if (!user || user.isTest || Date.now() - user._creationTime < LEADERBOARD_MIN_AGE_MS) continue;
       out.push({ rank: out.length + 1, name: user.name ?? '?', rating: Math.round(r.display * 10) / 10, games: r.gamesPlayed });
       if (out.length === LEADERBOARD_SIZE) break;
     }

@@ -36,7 +36,7 @@ test('the online lobby and a table lobby have no axe violations', async ({ brows
   await expectAccessible(page);
   await page.getByRole('button', { name: 'Novi stol' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
-  await expect(page).toHaveURL(/#\/t\/[A-Z2-9]{6}$/);
+  await expect(page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
   await expect(page.getByRole('button', { name: 'Pokreni igru' })).toBeVisible();
   await expectAccessible(page);
   expect(errors).toEqual([]);
