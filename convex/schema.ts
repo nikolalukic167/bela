@@ -11,6 +11,8 @@ export const seatValidator = v.union(
     name: v.string(),
     level: v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
     userId: v.optional(v.id('users')),
+    /** Playing for this away player until they come back (reconnect). */
+    standInFor: v.optional(v.id('users')),
   }),
 );
 
@@ -80,6 +82,14 @@ export default defineSchema({
     seat: v.number(),
     action: v.any(),
   }).index('by_table_seq', ['tableId', 'seq']),
+
+  // Last heartbeat of each human at a running table. Kept apart from `tables` so a heartbeat
+  // doesn't re-run every player's `watch` query. A row exists while its presence check is scheduled.
+  presence: defineTable({
+    tableId: v.id('tables'),
+    userId: v.id('users'),
+    lastSeen: v.number(),
+  }).index('by_table_user', ['tableId', 'userId']),
 
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({

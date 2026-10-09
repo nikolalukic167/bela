@@ -16,7 +16,7 @@ export const SERVER_BOT_LEVELS: ServerBotLevel[] = ['easy', 'medium', 'hard'];
 export type Seat =
   | { kind: 'empty' }
   | { kind: 'user'; userId: Id<'users'>; name: string }
-  | { kind: 'bot'; name: string; level: ServerBotLevel; userId?: Id<'users'> };
+  | { kind: 'bot'; name: string; level: ServerBotLevel; userId?: Id<'users'>; standInFor?: Id<'users'> };
 
 export const SEATS = 4;
 
@@ -30,6 +30,12 @@ export function makeCode(randomInt: (max: number) => number): string {
 
 export function seatOf(seats: Seat[], userId: Id<'users'>): number {
   return seats.findIndex((s) => s.kind === 'user' && s.userId === userId);
+}
+
+/** The player's seat, also while a bot stands in for them (see `standIn`). */
+export function ownSeat(seats: Seat[], userId: Id<'users'>): number {
+  const seat = seatOf(seats, userId);
+  return seat >= 0 ? seat : seats.findIndex((s) => s.kind === 'bot' && s.standInFor === userId);
 }
 
 export const firstEmpty = (seats: Seat[]) => seats.findIndex((s) => s.kind === 'empty');
@@ -52,6 +58,34 @@ export function fillWithBots(seats: Seat[], level: ServerBotLevel): Seat[] {
   return out;
 }
 
+/**
+ * Reconnect (architecture §7): a seat is kept while its player's last heartbeat is
+ * within `grace`. After that a bot stands in until they come back.
+ */
+export function presenceCheck(lastSeen: number, now: number, grace: number): { expired: true } | { expired: false; recheckAt: number } {
+  return now - lastSeen >= grace ? { expired: true } : { expired: false, recheckAt: lastSeen + grace };
+}
+
+/** A bot plays an away player's seat under their name, and remembers whose seat it is. */
+export function standIn(seats: Seat[], seat: number, level: ServerBotLevel): Seat[] {
+  const s = seats[seat];
+  if (s?.kind !== 'user') return seats;
+  const out = [...seats];
+  out[seat] = { kind: 'bot', name: s.name, level, standInFor: s.userId };
+  return out;
+}
+
+/** The returning player takes their seat back from the stand-in bot, or null if there is none. */
+export function reclaimSeat(seats: Seat[], userId: Id<'users'>): { seats: Seat[]; seat: number } | null {
+  const seat = seats.findIndex((s) => s.kind === 'bot' && s.standInFor === userId);
+  if (seat < 0) return null;
+  const out = [...seats];
+  out[seat] = { kind: 'user', userId, name: (seats[seat] as { name: string }).name };
+  return { seats: out, seat };
+}
+
+const hasStandIn = (seats: Seat[]) => seats.some((s) => s.kind === 'bot' && s.standInFor !== undefined);
+
 export function startState(options: BelaOptions, seed: number): BelaState {
   return belaGame.setup(options, seed);
 }
@@ -64,6 +98,8 @@ export type Mover =
 
 export function moverOf(state: BelaState, seats: Seat[]): Mover {
   if (belaGame.isOver(state)) return { kind: 'none' };
+  // Every human is away: wait for one to come back rather than play a match nobody watches.
+  if (humanCount(seats) === 0 && hasStandIn(seats)) return { kind: 'none' };
   const auto = belaGame.autoAction(state);
   if (auto) return { kind: 'auto', action: auto };
   if (state.phase === 'handOver') {
