@@ -79,7 +79,7 @@ export default defineSchema({
     timerProfile: v.optional(timerProfileValidator),
     /** Set by the compaction cron: 'compacted' (move log deleted) or 'kept' (rated or test). */
     actionLog: v.optional(v.union(v.literal('compacted'), v.literal('kept'))),
-    /** Listed in the public lobby while it waits for players (architecture §14.6). Default: private. */
+    /** Listed in the public lobby while it waits for players (architecture §14.8). Default: private. */
     isPublic: v.optional(v.boolean()),
   })
     .index('by_code', ['code'])

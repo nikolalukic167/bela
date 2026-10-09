@@ -9,7 +9,7 @@ afterEach(() => vi.useRealTimers());
 
 const errCode = async (p: Promise<unknown>) => ((await p.then(() => null, (e) => e)) as { data?: { code?: string } } | null)?.data?.code;
 
-describe('public lobby (architecture §14.6)', () => {
+describe('public lobby (architecture §14.8)', () => {
   it('lists public lobbies with a free seat: what a joiner needs, and no user ids', async () => {
     const t = newBackend();
     const host = await signUp(t, 'Hostess', { isAnonymous: false });

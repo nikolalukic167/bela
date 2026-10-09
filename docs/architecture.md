@@ -25,7 +25,7 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 Rules for ordering:
 - Reconnect handling and bots ship **with** phase 2, not after: they are what keeps a table alive when a friend drops.
 - Match history (every action stored) ships with the first online game even though replays are phase 5; retrofitting it is much harder than storing it from day one.
-- Public matchmaking is deliberately *not* on the list until private tables show real usage.
+- Public matchmaking is deliberately *not* on the list until private tables show real usage. A simple **public lobby** (hosts list a table, anyone joins) is open since §14.8; matchmaking is still not.
 
 ## 3. System overview
 
@@ -84,7 +84,7 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 - **`legalActions` is the validator.** The server rejects any action that is not in `legalActions(state, seat)`; the UI uses the same list for hints.
 - **`view(state, seat)` is the only thing a client ever receives.** It must exclude: other hands, unplayed talon cards, the deck seed, and the face-down state of anything not yet revealed. Declarations stay hidden until the rules reveal them.
 - **Options are data** (`BelaOptions`: target, direction, `belaAlwaysCounts`, `tie`). New house rules extend this type, get a default that preserves current behaviour, and are covered in `docs/rules/bela.md` plus a scoring test. Options are frozen when the game starts and stored with the table, so a rule change can never alter a game in progress.
-- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. Add `seats` to `GameDefinition` rather than hardcoding 4.
+- **Modes** (2-, 3-, 4-player; 501/701/1001) are options + seat count on the same engine, not forks. Add `seats` to `GameDefinition` rather than hardcoding 4. Only 4-player is built; 2- and 3-player stay a spec for now (§14.9).
 - **Action log.** Online tables store `{seed, options, actions[]}` append-only. State is a cache that can be rebuilt from the log; the log is the audit trail and the replay source.
 - Ratings, stats, and achievements are computed from the **finished game record**, in separate modules. The engine knows nothing about them.
 
@@ -126,7 +126,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - **Reconnect:** an open table page sends `tables.heartbeat` every 15 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for the table's grace period (60 s on `normal`, `RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. In a **rated** game there is no stand-in: leaving or dropping past the grace period ends the match as `abandoned`, the leaver's team loses, and only the leaver (not their partner) takes the rating loss. The grace period comes from the table's timer profile.
 - **Turn timers:** while the table waits on a human, `scheduleNext` arms `tables.timeout` (version-checked). When the move time runs out, the server plays a medium bot's move for that seat, which they keep; an unclicked hand summary deals on by itself. `watch` returns the `deadline`; the page counts down the last 20 s.
 - **Timer profiles** (§14.3): the host picks one at creation (`tables.create({ timerProfile })`); it is stored on the table, never changes, and a rematch keeps it. `timeoutFor` and the presence check read it (`TIMER_PROFILES` in `lib/config.ts`): **relaxed** 120 s grace / 60 s per move / 40 s summary, **normal** (default) 60 / 30 / 20 s, **quick** 30 / 15 / 10 s (decided §14; the first version used 90 / 45 / 30 s). Every grace period outlasts at least two heartbeats.
-- **Public lobby** (§14.6): the host can mark a table public at creation (`tables.create({ isPublic })`, default private). `tables.publicLobby` is a live query of public tables in `lobby` with a free seat and an unexpired code, newest first, at most 30 (`PUBLIC_LOBBY_SIZE`): code, host name, options, timer profile, rated, seats taken; no user ids; test tables never, nor tables with someone the caller blocked or is blocked by. "Join" goes through `tables.join`, so blocks, code expiry and the rated rule apply exactly as for a shared code (rated tables seat account holders only, checked at join).
+- **Public lobby** (§14.8): the host can mark a table public at creation (`tables.create({ isPublic })`, default private). `tables.publicLobby` is a live query of public tables in `lobby` with a free seat and an unexpired code, newest first, at most 30 (`PUBLIC_LOBBY_SIZE`): code, host name, options, timer profile, rated, seats taken; no user ids; test tables never, nor tables with someone the caller blocked or is blocked by. "Join" goes through `tables.join`, so blocks, code expiry and the rated rule apply exactly as for a shared code (rated tables seat account holders only, checked at join).
 - **Rematch:** `tables.rematch` on a finished table opens one lobby with the same seats and options (away players seated in person again); the old table stores `rematchCode`, so everyone lands at the same table.
 - **Cleanup:** `crons.ts` runs `tables.cleanup` daily: deletes lobbies never started within 24 h and running tables every human has been away from for 24 h (`STALE_TABLE_MS`). Finished tables are history and stay.
 - **Ratings:** a table is rated or not from creation (`tables.create({ rated })`). Rated tables need four different account holders: no bots, no guests (`ratedBlocker`). On game end the same mutation writes `games`, updates `ratings` and appends `ratingHistory` (`convex/ratings.ts` → pure `convex/lib/ratingLogic.ts` → `src/ratings/`). The quartet cap (3 rated games per 24 h for the same four) turns extra games unrated. The **per-opponent daily gain cap** (`DAILY_GAIN_CAP`, 4 display points in 24 h) stops win-trading with rotating partners: a winner gains at most the room left against the opponent they already took most from that day (the game still counts; the cut comes off `mu`, losses are untouched; `capGain`/`gainsByOpponent` in `ratingLogic.ts`). `ratings.leaderboard` is public and lists players with 10+ rated matches and an account at least 1 day old (`LEADERBOARD_MIN_AGE_MS`) by name only.
@@ -170,7 +170,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 
 ### 9.4 Abuse & privacy
 - Rate limits on table creation, invites, friend requests, name changes (built: 3 renames per 24 h, `RENAME_TOO_SOON`; 10 reports per day).
-- **Names** (built): `convex/lib/names.ts` checks every chosen name: guest sign-in, username sign-up (not sign-in, so a list change never locks anyone out) and `users.rename`. It lowercases, strips diacritics (đ → d), undoes leetspeak (0→o, 1→i, 4→a, @→a…), drops separators and collapses repeated letters, then looks for Croatian and English roots; a short allow-list covers real names that contain one. Refused names get `NAME_NOT_ALLOWED`. Google names are not filtered. Names stay **non-unique** (§14.1). Renaming changes the name for new tables; seats at existing tables keep the old one.
+- **Names** (built): `convex/lib/names.ts` checks every chosen name: guest sign-in, username sign-up (not sign-in, so a list change never locks anyone out) and `users.rename`. It lowercases, strips diacritics (đ → d), undoes leetspeak (0→o, 1→i, 4→a, @→a…), drops separators and collapses repeated letters, then looks for Croatian and English roots; a short allow-list covers real names that contain one. Refused names get `NAME_NOT_ALLOWED`. Google names are not filtered. Names are **not unique yet**; uniqueness is decided (§14.1) and being implemented. Renaming changes the name for new tables; seats at existing tables keep the old one.
 - **Block, mute, report** (built, `convex/moderation.ts`): players pick another human by *seat* at a table they share (never by a client-sent user id), from *Players at this table* on the table page. Block: `tables.join` refuses (`BLOCKED`) when either side has blocked anyone seated. Mute: private; `moderation.mutedSeats({code})` gives the seats whose emotes and quick phrases the page should hide. Report: fixed reason, one open report per pair, shown in `/admin` where an admin dismisses it or resets the name to `Igrač`. Reports, blocks, unblocks and admin decisions go to `moderationLog`; mutes are not logged. Unblock and unmute from *My account*. `tables.rematch` leaves the seat of anyone blocked with the player who asks for it empty.
 - Store the minimum personal data: display name, and for Google users avatar and email (never shown). Username accounts store no real email at all, so they have **no password recovery** (a known trade-off, revisit with email verification). Region is self-declared, coarse (country/city), optional.
 - No third-party trackers in v1. If analytics are added: cookieless, aggregate, disclosed in the privacy page.
@@ -227,14 +227,21 @@ How-to and dashboard steps: [operations.md](operations.md).
 - **Premium analytics/replays:** gated by entitlement on *read* of derived data; the underlying game records of one's own games stay accessible to everyone for dispute purposes.
 - **Sponsored tournaments:** an organiser role on `tournaments`/`clubs`, sponsor branding as data; no ads inside the table.
 
-## 14. Open decisions (record as ADRs when settled)
+## 14. Decisions
 
-1. Display names: guests and username accounts pick their own (2–24 chars, filtered, renamed on *My account*, 3 times a day). Still open: uniqueness (names are **not** unique today), and whether Google names should be filtered or replaced.
-2. Do signed-in local games against bots count for personal stats (unrated)?
-3. Default timer profile per mode (quick vs long game, rated vs friendly). Profiles exist (§7: relaxed / normal / quick, host's choice per table); every table still defaults to normal (90 s grace, 45 s per move, 30 s on the hand summary). Open: should 1001 or rated tables default differently?
-4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
-5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
-6. When (if ever) to open a public lobby; minimum concurrent-player threshold.
+Settled with the product owner (October 2026); the sections named carry the details.
+
+1. **Display names are unique** (accounts & safety implements it). **Google names are not filtered**: the offensive-name filter applies to names people type, not to the name Google supplies.
+2. **Local games against bots count separately in personal stats**: they never mix with online results and are never rated.
+3. **Timers** (§7): profiles relaxed 120 / 60 / 40 s, **normal 60 / 30 / 20 s (the default for every table)**, quick 30 / 15 / 10 s (reconnect grace / per move / hand summary). The host picks one per table; no per-mode defaults.
+4. **Rating abuse** (§7, §9.1): at most **4 display points gained off any one opponent per day**; the leaderboard needs 10 rated matches and an **account at least 1 day old**.
+5. **Rated status is frozen at table creation** (§1.6): nothing switches it during a match. The `ratings` flag only stops new rated tables; rated matches already running are rated when they finish.
+6. **Pair rating does not feed solo ratings**: pairs (phase 4) get their own rating only.
+7. **Regions are not built**: no country/city/club fields or regional boards for now.
+8. **The public lobby is open** (§7): hosts can list a table; there is no matchmaking or minimum-player threshold.
+9. **2- and 3-player modes are not built for now**: the engine contract keeps the spec (§5), the product ships 4-player Bela only.
+
+Open: none at the moment. New ones go here, and settled ones get a line above (or an ADR when they change the architecture).
 
 ## 15. Guests, test data and the admin panel
 

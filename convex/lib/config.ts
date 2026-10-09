@@ -50,7 +50,7 @@ export const DAILY_GAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const ACT_LIMIT = { burst: 10, refillMs: 250 };
 export const LEADERBOARD_SIZE = 50;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
-/** Most open public tables the /online page lists (architecture §14.6). */
+/** Most open public tables the /online page lists (architecture §14.8). */
 export const PUBLIC_LOBBY_SIZE = 30;
 export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;

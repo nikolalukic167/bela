@@ -650,7 +650,7 @@ export const watch = query({
 });
 
 /**
- * Public tables waiting for players, newest first (architecture §14.6). Only what someone needs to
+ * Public tables waiting for players, newest first (architecture §14.8). Only what someone needs to
  * decide to join: the code to join with, the host's name, options, clock, rated and seats taken.
  * No user ids. Private, full, started, expired and test tables never appear, nor tables with
  * someone the caller has blocked or is blocked by.
