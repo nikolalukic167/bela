@@ -15,6 +15,9 @@ import {
   type ServerBotLevel,
 } from './lib/tableLogic';
 import { deleteTable, loadState, scheduleNext, uniqueCode } from './tables';
+import { usageReport } from './maintenance';
+import { FLAGS, allFlags } from './lib/flags';
+import { logEvent } from './lib/log';
 import { DEFAULT_RULES, type BelaState } from '../src/games/bela/state';
 
 const levelValidator = v.union(v.literal('easy'), v.literal('medium'), v.literal('hard'));
@@ -74,7 +77,7 @@ export const overview = query({
     }
     const testUsers = await ctx.db.query('users').withIndex('by_test', (q) => q.eq('isTest', true)).collect();
     const realTables = (await ctx.db.query('tables').withIndex('by_test', (q) => q.eq('isTest', false)).collect()).length;
-    return { tables: rows, testUsers: testUsers.length, realTables };
+    return { tables: rows, testUsers: testUsers.length, realTables, flags: await allFlags(ctx), usage: await usageReport(ctx) };
   },
 });
 
@@ -127,6 +130,18 @@ export const clearTestData = mutation({
     const users = await ctx.db.query('users').withIndex('by_test', (q) => q.eq('isTest', true)).collect();
     for (const u of users) await ctx.db.delete(u._id);
     return { tables: tables.length, users: users.length };
+  },
+});
+
+/** Switches a feature flag (architecture §12). Logged, so every change is traceable. */
+export const setFlag = mutation({
+  args: { name: v.union(...FLAGS.map((f) => v.literal(f))), on: v.boolean() },
+  handler: async (ctx, { name, on }) => {
+    await requireAdmin(ctx);
+    const row = await ctx.db.query('config').withIndex('by_key', (q) => q.eq('key', name)).unique();
+    if (row) await ctx.db.patch(row._id, { on });
+    else await ctx.db.insert('config', { key: name, on });
+    logEvent('flag.changed', { flag: name, on });
   },
 });
 

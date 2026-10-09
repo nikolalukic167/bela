@@ -24,6 +24,8 @@ export const optionsValidator = v.object({
   botLevel: v.optional(v.union(v.literal('easy'), v.literal('medium'), v.literal('hard'))),
 });
 
+export const timerProfileValidator = v.union(v.literal('relaxed'), v.literal('normal'), v.literal('quick'));
+
 export default defineSchema({
   ...authTables,
 
@@ -67,11 +69,18 @@ export default defineSchema({
     rematchCode: v.optional(v.string()),
     /** Set at creation and never changed (architecture §1.6): four account holders, results rated. */
     rated: v.optional(v.boolean()),
+    /** The invite code admits new players until then (§9.3). Absent on tables from before codes expired. */
+    codeExpiresAt: v.optional(v.number()),
+    /** Clock for this table (lib/config TIMER_PROFILES), set at creation; absent means 'normal'. */
+    timerProfile: v.optional(timerProfileValidator),
+    /** Set by the compaction cron: 'compacted' (move log deleted) or 'kept' (rated or test). */
+    actionLog: v.optional(v.union(v.literal('compacted'), v.literal('kept'))),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])
     .index('by_host', ['hostId'])
-    .index('by_test', ['isTest', 'createdAt']),
+    .index('by_test', ['isTest', 'createdAt'])
+    .index('by_action_log', ['status', 'actionLog', 'createdAt']),
 
   // Full engine state. SERVER ONLY: no query may return this table's rows (architecture §6).
   tableStates: defineTable({
@@ -141,6 +150,37 @@ export default defineSchema({
     delta: v.number(),
     at: v.number(),
   }).index('by_user', ['userId', 'at']),
+
+  // Codes the host revoked (`tables.newCode`). Seated players' pages still resolve them; nobody else does.
+  retiredCodes: defineTable({
+    code: v.string(),
+    tableId: v.id('tables'),
+  })
+    .index('by_code', ['code'])
+    .index('by_table', ['tableId']),
+
+  // Token buckets (lib/rateLimit.ts), keyed e.g. `act:<tableId>:<userId>`. The daily cleanup drops idle ones.
+  rateLimits: defineTable({
+    key: v.string(),
+    tokens: v.number(),
+    at: v.number(),
+  })
+    .index('by_key', ['key'])
+    .index('by_at', ['at']),
+
+  // Feature flags (lib/flags.ts), switched in the admin panel. A missing row means on.
+  config: defineTable({
+    key: v.string(),
+    on: v.boolean(),
+  }).index('by_key', ['key']),
+
+  // What was created per UTC day, counted by the quota-watch cron (maintenance.countUsage).
+  usage: defineTable({
+    day: v.string(),
+    tables: v.number(),
+    actions: v.number(),
+    games: v.number(),
+  }).index('by_day', ['day']),
 
   // Which tables a user sits at, so "my tables" is an index lookup.
   memberships: defineTable({

@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from 'convex/react';
+import { ConvexError } from 'convex/values';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
-import { HEARTBEAT_MS } from '../../convex/lib/config';
+import { HEARTBEAT_MS, TIMER_PROFILES } from '../../convex/lib/config';
 import type { BelaAction } from '../games/bela/state';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
@@ -28,8 +29,14 @@ function OnlineTable({ code }: { code: string }) {
   const act = useMutation(api.tables.act);
   const leave = useMutation(api.tables.leave);
   const rematch = useMutation(api.tables.rematch);
+  const flags = useQuery(api.flags.list, {});
   const [error, setError] = useState<string | null>(null);
   useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
+  // The host replaced the invite code: seated players' pages follow the table to its new code.
+  const moved = data && data.code !== code ? data.code : null;
+  useEffect(() => {
+    if (moved) navigate(`/t/${moved}`, { replace: true });
+  }, [moved, navigate]);
 
   const guard = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -78,9 +85,11 @@ function OnlineTable({ code }: { code: string }) {
             if (a.type !== 'collect') void guard(() => act({ code, action: a })); // collecting is the server's job
           }}
           // "Play again" opens (or joins) the rematch at a new table with the same seating.
+          // With rematches switched off (a feature flag), "play again" goes back to the table list.
           onMatchEnd={() =>
             void guard(async () => {
-              navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
+              if (flags?.rematch === false) navigate('/online');
+              else navigate(`/t/${data.rematchCode ?? (await rematch({ code }))}`);
             })
           }
           gameActions={[
@@ -147,11 +156,22 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
   const addBot = useMutation(api.tables.addBot);
   const clearSeat = useMutation(api.tables.clearSeat);
   const start = useMutation(api.tables.start);
+  const newCode = useMutation(api.tables.newCode);
   const [copied, setCopied] = useState<string | null>(null);
   const lobby = data.status === 'lobby';
   const seated = data.mySeat !== null;
   const hasEmpty = data.seats.some((s) => s.kind === 'empty');
   const link = `${window.location.origin}${window.location.pathname}#/t/${code}`;
+  const expired = data.codeExpiresAt !== null && Date.now() > data.codeExpiresAt;
+  const sitDown = () =>
+    guard(async () => {
+      if ((await join({ code })) === null) throw new ConvexError({ code: 'NOT_FOUND' });
+    });
+  const replaceCode = () =>
+    window.confirm(t('online.newCodeConfirm')) &&
+    guard(async () => {
+      navigate(`/t/${await newCode({ code })}`, { replace: true });
+    });
 
   const copy = async (text: string, what: string) => {
     try {
@@ -193,6 +213,9 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
               <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
               {data.isTest && <span className="badge badge-warning">test</span>}
               {data.rated && <span className="badge badge-primary">{t('online.rated')}</span>}
+              <span className="badge badge-ghost" title={t('online.timer')}>
+                {t(`online.timer.${data.timerProfile}`)} · {TIMER_PROFILES[data.timerProfile].turnMs / 1000} s
+              </span>
             </div>
             {lobby && (
               <>
@@ -205,6 +228,12 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
                   </button>
                 </div>
                 <input readOnly className="input input-sm w-full font-mono" value={link} aria-label={t('online.copyLink')} onFocus={(e) => e.currentTarget.select()} />
+                {expired && <p className="text-sm text-warning">{t('online.codeExpired')}</p>}
+                {data.isHost && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => void replaceCode()}>
+                    {t('online.newCode')}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -254,7 +283,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
 
         <div className="flex flex-wrap gap-2">
           {lobby && !seated && hasEmpty && (
-            <button type="button" className="btn btn-primary" onClick={() => void guard(() => join({ code }))}>
+            <button type="button" className="btn btn-primary" onClick={() => void sitDown()}>
               {t('online.sitDown')}
             </button>
           )}
