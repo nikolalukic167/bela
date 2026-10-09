@@ -46,7 +46,7 @@ test('the leaderboard is public', async ({ page }) => {
 
 test('the host replaces the invite code: the old link stops working, the new one seats a friend', async ({ browser }) => {
   const errors: string[] = [];
-  const ana = await guest(browser, 'Ana', errors);
+  const ana = await guest(browser, 'Ana K', errors); // display names are unique, and every spec shares one backend
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
   await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
@@ -69,7 +69,7 @@ test('the host replaces the invite code: the old link stops working, the new one
 
 test('a quick table: the host picks the timer profile, and the move countdown starts at once', async ({ browser }) => {
   const errors: string[] = [];
-  const ana = await guest(browser, 'Ana', errors);
+  const ana = await guest(browser, 'Ana Q', errors);
   await ana.page.getByLabel('Vrijeme za potez').selectOption('quick');
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
@@ -82,7 +82,7 @@ test('a quick table: the host picks the timer profile, and the move countdown st
 
 test('public lobby: one player opens a public table, another finds it in the list and sits down', async ({ browser }) => {
   const errors: string[] = [];
-  // A unique host name, so public tables left by earlier runs against the same backend don't match.
+  // Unique names: display names are unique, and public tables left by earlier runs against the same backend must not match.
   const host = `Ana ${Array.from({ length: 4 }, () => 'bcdfghjkmnprstvz'[Math.floor(Math.random() * 16)]).join('')}`;
   const ana = await guest(browser, host, errors);
   await ana.page.getByRole('checkbox', { name: 'Javni stol' }).check();
@@ -91,7 +91,7 @@ test('public lobby: one player opens a public table, another finds it in the lis
   await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
   await expect(ana.page.getByText('Javni', { exact: true })).toBeVisible();
 
-  const bruno = await guest(browser, 'Bruno', errors);
+  const bruno = await guest(browser, `Bruno ${host.slice(4)}`, errors);
   const publicList = bruno.page.getByRole('region', { name: 'Javni stolovi' });
   await expect(publicList.getByText(host)).toBeVisible();
   await publicList.getByRole('button', { name: `Pridruži se: ${host}` }).click();

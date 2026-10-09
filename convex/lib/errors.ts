@@ -18,7 +18,8 @@ export type TableErrorCode =
   | 'RATED_NEEDS_ACCOUNTS'
   | 'NAME_NOT_ALLOWED'
   | 'RENAME_TOO_SOON'
-  | 'BLOCKED';
+  | 'BLOCKED'
+  | 'NAME_TAKEN';
 
 export class TableError extends ConvexError<{ code: TableErrorCode }> {
   constructor(code: TableErrorCode) {

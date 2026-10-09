@@ -49,10 +49,13 @@ export default defineSchema({
     renameTimes: v.optional(v.array(v.number())),
     /** Set when the player deleted their account; the row stays, anonymised, for others' game records. */
     deletedAt: v.optional(v.number()),
+    /** Lowercased, single-spaced name: unique among players who have one (architecture §14.1). */
+    nameKey: v.optional(v.string()),
   })
     .index('email', ['email'])
     .index('phone', ['phone'])
-    .index('by_test', ['isTest']),
+    .index('by_test', ['isTest'])
+    .index('by_name_key', ['nameKey']),
 
   tables: defineTable({
     code: v.string(),

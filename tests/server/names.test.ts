@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptName, isOffensive, normalizeForFilter, renameCheck } from '../../convex/lib/names';
+import { acceptName, isOffensive, nameKey, nameVariants, normalizeForFilter, renameCheck } from '../../convex/lib/names';
 import { RENAME_LIMIT, RENAME_WINDOW_MS } from '../../convex/lib/config';
 
 const code = (fn: () => unknown) => {
@@ -67,5 +67,24 @@ describe('renameCheck', () => {
     const later = renameCheck(times, now + RENAME_WINDOW_MS + RENAME_LIMIT);
     expect(later.ok).toBe(true);
     expect(later.ok && later.times).toEqual([now + RENAME_WINDOW_MS + RENAME_LIMIT]);
+  });
+});
+
+describe('nameKey', () => {
+  it('ignores case and spacing, so "Ana", "ana" and " Ana " collide', () => {
+    expect(nameKey('Ana')).toBe('ana');
+    expect(nameKey(' ana ')).toBe('ana');
+    expect(nameKey('Ana   Marija')).toBe(nameKey('ana marija'));
+    expect(nameKey('Đurđa')).toBe('đurđa'); // letters stay letters: "Durda" is someone else
+    expect(nameKey('Durda')).not.toBe(nameKey('Đurđa'));
+  });
+});
+
+describe('nameVariants', () => {
+  it('offers the name, then numbered variants within the length limit', () => {
+    const v = nameVariants('Ana');
+    expect(v.slice(0, 3)).toEqual(['Ana', 'Ana 2', 'Ana 3']);
+    for (const name of nameVariants('x'.repeat(24))) expect(name.length).toBeLessThanOrEqual(24);
+    expect(nameVariants('x'.repeat(24))[1]).toBe(`${'x'.repeat(22)} 2`);
   });
 });
