@@ -95,6 +95,22 @@ describe('public lobby (architecture §14.6)', () => {
     expect(await member.as.mutation(api.tables.join, { code: c })).toBe(c);
   });
 
+  it('respects blocks both ways: a blocked player neither sees the table nor gets a seat', async () => {
+    const t = newBackend();
+    const ana = await signUp(t, 'Ana');
+    const bruno = await signUp(t, 'Bruno');
+    const c = await ana.as.mutation(api.tables.create, { options: OPTIONS, isPublic: true });
+    await bruno.as.mutation(api.tables.join, { code: c });
+    await ana.as.mutation(api.moderation.block, { code: c, seat: 1 });
+    await bruno.as.mutation(api.tables.leave, { code: c });
+    expect(await bruno.as.query(api.tables.publicLobby, {})).toEqual([]);
+    expect(await errCode(bruno.as.mutation(api.tables.join, { code: c }))).toBe('BLOCKED');
+    // Ana doesn't see Bruno's public tables either.
+    const theirs = await bruno.as.mutation(api.tables.create, { options: OPTIONS, isPublic: true });
+    expect((await ana.as.query(api.tables.publicLobby, {})).map((x) => x.code)).not.toContain(theirs);
+    expect((await (await signUp(t, 'Cvita')).as.query(api.tables.publicLobby, {})).map((x) => x.code).sort()).toEqual([c, theirs].sort());
+  });
+
   it('requires a signed-in user', async () => {
     const t = newBackend();
     expect(await errCode(t.query(api.tables.publicLobby, {}))).toBe('UNAUTHENTICATED');

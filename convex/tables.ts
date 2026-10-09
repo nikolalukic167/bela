@@ -50,7 +50,7 @@ import { viewFor } from '../src/games/bela/view';
 import { recordGame } from './ratings';
 import { ratedBlocker } from './lib/ratingLogic';
 import { belaGame } from '../src/games/bela/game';
-import { blockedBetween } from './lib/blocks';
+import { blockedBetween, blockedWith } from './lib/blocks';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -652,12 +652,14 @@ export const watch = query({
 /**
  * Public tables waiting for players, newest first (architecture §14.6). Only what someone needs to
  * decide to join: the code to join with, the host's name, options, clock, rated and seats taken.
- * No user ids. Private, full, started, expired and test tables never appear.
+ * No user ids. Private, full, started, expired and test tables never appear, nor tables with
+ * someone the caller has blocked or is blocked by.
  */
 export const publicLobby = query({
   args: {},
   handler: async (ctx) => {
-    await requireUser(ctx);
+    const user = await requireUser(ctx);
+    const blocked = await blockedWith(ctx, user._id);
     const now = Date.now();
     const rows = await ctx.db
       .query('tables')
@@ -668,6 +670,8 @@ export const publicLobby = query({
     for (const t of rows) {
       const seats = t.seats as Seat[];
       if (t.isTest || firstEmpty(seats) < 0 || (t.codeExpiresAt !== undefined && now > t.codeExpiresAt)) continue;
+      // A table `join` would refuse because of a block isn't offered at all.
+      if (seats.some((s) => (s.kind === 'user' && blocked.has(s.userId)) || (s.kind === 'bot' && s.standInFor && blocked.has(s.standInFor)))) continue;
       const host = seats.find((s) => s.kind === 'user' && s.userId === t.hostId);
       out.push({
         code: t.code,
