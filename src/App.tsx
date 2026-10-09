@@ -9,6 +9,7 @@ import { History } from './pages/History';
 import { Leaderboard } from './pages/Leaderboard';
 import { Home } from './pages/Home';
 import { Play } from './pages/Play';
+import { Privacy } from './pages/Privacy';
 import { Rules } from './pages/Rules';
 import { SettingsProvider } from './ui/settings';
 
@@ -28,6 +29,7 @@ export function App() {
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/account" element={<AccountPage />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="*" element={<Home />} />
             </Routes>
           </HashRouter>

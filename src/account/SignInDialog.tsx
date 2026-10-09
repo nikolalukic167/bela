@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
 import { errorKey } from '../online/errors';
@@ -141,6 +142,11 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
         <GoogleIcon />
         {t('menu.signInGoogle')}
       </button>
+      <p className="mt-3 text-center text-sm">
+        <Link to="/privacy" className="link" onClick={onClose}>
+          {t('auth.privacyLink')}
+        </Link>
+      </p>
       <div className="modal-action">
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           {t('settings.cancel')}
