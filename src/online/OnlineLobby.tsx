@@ -97,7 +97,7 @@ function OnlineLobby() {
                   {t('online.rated')}
                 </label>
               )}
-              <label className="label cursor-pointer gap-2">
+              <label className="label cursor-pointer gap-2 text-base-content">
                 <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
                 {t('online.public')}
               </label>
