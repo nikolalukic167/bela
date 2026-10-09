@@ -166,7 +166,7 @@ function Admin() {
                   </label>
                 ))}
               </div>
-              <p className="text-sm opacity-70">Kill switches for everyone, effective at once. ratings off: no new rated tables and no rating changes.</p>
+              <p className="text-sm opacity-70">Kill switches for everyone, effective at once. ratings off: no new rated tables; matches already rated still count.</p>
             </div>
           </section>
         )}

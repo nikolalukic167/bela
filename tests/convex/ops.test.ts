@@ -1,8 +1,8 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, internal } from '../../convex/_generated/api';
-import { CALLS_PER_ACTION, QUOTA_CALLS_PER_MONTH, QUOTA_WARN_AT } from '../../convex/lib/config';
-import { newBackend, OPTIONS, signUp } from './setup';
+import { CALLS_PER_ACTION, HEARTBEAT_MS, QUOTA_CALLS_PER_MONTH, QUOTA_WARN_AT } from '../../convex/lib/config';
+import { elapse, newBackend, OPTIONS, signUp } from './setup';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -40,19 +40,27 @@ describe('feature flags', () => {
     expect(await errCode(host.as.mutation(api.tables.rematch, { code: c }))).toBe('FEATURE_OFF');
   });
 
-  it('ratings off: no new rated tables, and a rated match that ends meanwhile changes no rating', async () => {
+  it('ratings off stops new rated tables only: a rated match already running is still rated (architecture §1.6)', async () => {
     const t = newBackend();
     const admin = await signUp(t, 'Boss', { isAdmin: true });
-    const players = [];
+    const players: Awaited<ReturnType<typeof signUp>>[] = [];
     for (const n of ['Ana', 'Bruno', 'Cvita', 'Duje']) players.push(await signUp(t, n, { isAnonymous: false }));
     const c = await players[0].as.mutation(api.tables.create, { options: OPTIONS, rated: true });
     for (const p of players.slice(1)) await p.as.mutation(api.tables.join, { code: c });
     await players[0].as.mutation(api.tables.start, { code: c });
     await admin.as.mutation(api.admin.setFlag, { name: 'ratings', on: false });
     expect(await errCode(players[0].as.mutation(api.tables.create, { options: OPTIONS, rated: true }))).toBe('FEATURE_OFF');
-    await players[1].as.mutation(api.tables.leave, { code: c }); // ends the rated match as abandoned
-    expect(await t.run((ctx) => ctx.db.query('games').collect())).toMatchObject([{ rated: false, endReason: 'abandoned' }]);
-    expect(await t.run((ctx) => ctx.db.query('ratings').collect())).toEqual([]);
+    // Finish the running match: both teams one hand from the target, turn timers play for everyone.
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query('tableStates').first())!;
+      await ctx.db.patch(row._id, { state: { ...row.state, scores: [495, 495] } });
+    });
+    await elapse(t, 60 * 60_000, async (at) => {
+      if (at % HEARTBEAT_MS === 0) for (const p of players) await p.as.mutation(api.tables.heartbeat, { code: c });
+    }, 5000);
+    expect((await players[0].as.query(api.tables.watch, { code: c }))?.status).toBe('finished');
+    expect(await t.run((ctx) => ctx.db.query('games').collect())).toMatchObject([{ rated: true, endReason: 'normal' }]);
+    for (const p of players) expect((await p.as.query(api.ratings.mine, {}))?.games).toBe(1);
   });
 });
 

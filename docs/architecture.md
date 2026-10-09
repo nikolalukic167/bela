@@ -212,7 +212,7 @@ How-to and dashboard steps: [operations.md](operations.md).
 - **Quota watch** (built): against the Convex free tier (1M function calls/month, 0.5 GB storage). A daily cron (`maintenance.countUsage`) counts the previous UTC day's tables and actions (paged) into `usage`; the admin panel sums 30 days, estimates calls as actions × 5 (`CALLS_PER_ACTION`; ~2,300 per match) and warns at 70% (`QUOTA_WARN_AT`), and the cron logs `quota.warning`.
 - **Action-log compaction** (built): the action log of finished **unrated** non-test tables is deleted after 30 days (`maintenance.compactLogs`); their `games` row and final state stay. Rated logs are kept for replay and disputes.
 - **Backups:** Convex snapshot export, scheduled on the Pro plan or by CLI export (`npx convex export --prod`); steps in operations.md.
-- **Feature flags** (built): rows in `config`, switched in the admin panel, missing means on: `ratings` (off: no new rated tables, no rating changes), `rematch`, `chat`. `flags.list` is public. Tournaments get a flag when they exist.
+- **Feature flags** (built): rows in `config`, switched in the admin panel, missing means on: `ratings` (off: no new rated tables; tables already rated stay rated, §1.6), `rematch`, `chat`. `flags.list` is public. Tournaments get a flag when they exist.
 - Cost fallback: if the free tier is exceeded, the order of reduction is turn timers → bot delay ticks → view refresh frequency; the upgrade path is Convex paid plan, not a rewrite.
 
 ## 13. Business features, without compromising the above
