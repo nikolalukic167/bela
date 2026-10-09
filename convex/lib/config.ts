@@ -76,3 +76,13 @@ export const CHAT_WINDOW_MS = 10_000;
 export const CHAT_TEXT_MAX = 120;
 /** Messages a table's chat query returns, newest last. */
 export const CHAT_LIST_SIZE = 30;
+/** Name changes allowed per window (architecture §9.4). */
+export const RENAME_LIMIT = 3;
+export const RENAME_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Reports one player may file per day (architecture §9.4). */
+export const REPORT_LIMIT = 10;
+export const REPORT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** The name an admin gives a player whose name was reported as offensive. */
+export const NEUTRAL_NAME = 'Igrač';
+/** Shown wherever a player who deleted their account used to appear (architecture §9.2). */
+export const DELETED_NAME = 'Obrisani igrač';

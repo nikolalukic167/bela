@@ -1,17 +1,13 @@
-// Who may chat and whom a viewer hears. These are seams for the other workstreams:
-// block/mute is owned by accounts/safety (nikolalukic167/bela#21, wire up once on main),
-// the `chat` feature flag by ops (lib/flags.ts).
+// Who may chat and whom a viewer hears: mutes are owned by moderation.ts, the `chat`
+// feature flag by lib/flags.ts.
 import type { Id } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 import { flagOn } from './flags';
 
-/**
- * Users whose messages `viewer` must not see. Muting is per viewer: the sender is never
- * stopped. TODO(#21): return the `mutedId`s of
- * `ctx.db.query('mutes').withIndex('by_user', (q) => q.eq('userId', viewer))`.
- */
-export async function mutedBy(_ctx: QueryCtx, _viewer: Id<'users'>): Promise<Set<string>> {
-  return new Set();
+/** Users whose messages `viewer` must not see (moderation.mute). Per viewer: the sender is never stopped. */
+export async function mutedBy(ctx: QueryCtx, viewer: Id<'users'>): Promise<Set<string>> {
+  const rows = await ctx.db.query('mutes').withIndex('by_user', (q) => q.eq('userId', viewer)).collect();
+  return new Set(rows.map((r) => r.mutedId));
 }
 
 /** The `chat` feature flag (architecture §12); a missing row means on. */

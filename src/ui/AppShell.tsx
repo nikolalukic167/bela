@@ -181,6 +181,11 @@ export function AppShell({ center, gameActions, children, fixed }: Props) {
                   {t('menu.stats')}
                 </NavLink>
               </li>
+              <li>
+                <NavLink to="/privacy" onClick={close}>
+                  {t('menu.privacy')}
+                </NavLink>
+              </li>
             </ul>
           </li>
 
@@ -291,6 +296,11 @@ function AccountMenu({ onDone, onSignIn }: { onDone: () => void; onSignIn: () =>
               <span className="text-base-content">{account.profile?.name ?? '…'}</span>
               {account.profile?.isGuest && <span className="badge badge-sm badge-ghost">{t('auth.guestBadge')}</span>}
             </span>
+          </li>
+          <li>
+            <NavLink to="/account" onClick={onDone}>
+              {t('menu.myAccount')}
+            </NavLink>
           </li>
           {account.profile?.isAdmin && (
             <li>

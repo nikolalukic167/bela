@@ -97,3 +97,28 @@ test('a quick table: the host picks the timer profile, and the move countdown st
   await expect(ana.page.getByRole('timer')).toBeVisible({ timeout: 5000 });
   expect(errors).toEqual([]);
 });
+
+test('muting a player hides their chat for the muter only', async ({ browser }) => {
+  const errors: string[] = [];
+  const ana = await guest(browser, 'Ana', errors);
+  await ana.page.getByRole('button', { name: 'Novi stol' }).click();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
+  const link = ana.page.url();
+  const bruno = await guest(browser, 'Bruno', errors);
+  await bruno.page.goto(link);
+  await bruno.page.getByRole('button', { name: 'Sjedni za stol' }).click();
+  await expect(ana.page.getByText('Bruno')).toBeVisible();
+
+  await ana.page.getByRole('button', { name: 'Igrači za stolom' }).click();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Utišaj' }).click();
+  await expect(ana.page.getByRole('dialog').getByRole('button', { name: 'Poništi utišavanje' })).toBeVisible();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Zatvori' }).click();
+
+  await bruno.page.getByRole('button', { name: 'Ups!' }).click();
+  await expect(bruno.page.getByRole('listitem').filter({ hasText: 'Bruno: Ups!' })).toBeVisible();
+  await ana.page.getByRole('button', { name: 'Hvala!' }).click();
+  await expect(ana.page.getByRole('listitem').filter({ hasText: 'Ana: Hvala!' })).toBeVisible();
+  await expect(ana.page.getByRole('listitem').filter({ hasText: 'Bruno: Ups!' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

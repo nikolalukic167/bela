@@ -82,4 +82,15 @@ describe('chat', () => {
     expect(await errCode(ana.as.mutation(api.chat.send, { code, phrase: 'hello' }))).toBe('FEATURE_OFF');
     expect(await bruno.as.query(api.chat.list, { code })).toEqual([]);
   });
+
+  it('hides a muted player from the muter only; the sender is never stopped', async () => {
+    const { t, ana, bruno, code } = await lobby();
+    const cvita = await signUp(t, 'Cvita');
+    await cvita.as.mutation(api.tables.join, { code });
+    await bruno.as.mutation(api.moderation.mute, { code, seat: 0, muted: true });
+    await ana.as.mutation(api.chat.send, { code, phrase: 'hello' });
+    expect(await bruno.as.query(api.chat.list, { code })).toEqual([]);
+    expect(await cvita.as.query(api.chat.list, { code })).toHaveLength(1);
+    expect(await ana.as.query(api.chat.list, { code })).toHaveLength(1);
+  });
 });
