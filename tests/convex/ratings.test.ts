@@ -41,8 +41,9 @@ describe('rated tables', () => {
     expect(await errCode(host.as.mutation(api.tables.addBot, { code: c }))).toBe('RATED_NEEDS_FOUR');
     expect(await errCode(host.as.mutation(api.tables.start, { code: c }))).toBe('RATED_NEEDS_FOUR');
     for (const n of ['B', 'C']) await (await signUp(t, n, { isAnonymous: false })).as.mutation(api.tables.join, { code: c });
-    await (await signUp(t, 'Guest')).as.mutation(api.tables.join, { code: c });
-    expect(await errCode(host.as.mutation(api.tables.start, { code: c }))).toBe('RATED_NEEDS_ACCOUNTS');
+    // A guest is turned away when sitting down, not later at the start.
+    expect(await errCode((await signUp(t, 'Guest')).as.mutation(api.tables.join, { code: c }))).toBe('RATED_NEEDS_ACCOUNTS');
+    expect(await errCode(host.as.mutation(api.tables.start, { code: c }))).toBe('RATED_NEEDS_FOUR');
   });
 
   it('a finished rated match updates every player’s rating and history, atomically with the game record', async () => {

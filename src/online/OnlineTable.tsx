@@ -213,6 +213,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
               <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
               {data.isTest && <span className="badge badge-warning">test</span>}
               {data.rated && <span className="badge badge-primary">{t('online.rated')}</span>}
+              {data.isPublic && <span className="badge badge-secondary">{t('online.publicBadge')}</span>}
               <span className="badge badge-ghost" title={t('online.timer')}>
                 {t(`online.timer.${data.timerProfile}`)} · {TIMER_PROFILES[data.timerProfile].turnMs / 1000} s
               </span>

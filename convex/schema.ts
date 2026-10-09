@@ -75,12 +75,15 @@ export default defineSchema({
     timerProfile: v.optional(timerProfileValidator),
     /** Set by the compaction cron: 'compacted' (move log deleted) or 'kept' (rated or test). */
     actionLog: v.optional(v.union(v.literal('compacted'), v.literal('kept'))),
+    /** Listed in the public lobby while it waits for players (architecture §14.6). Default: private. */
+    isPublic: v.optional(v.boolean()),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])
     .index('by_host', ['hostId'])
     .index('by_test', ['isTest', 'createdAt'])
-    .index('by_action_log', ['status', 'actionLog', 'createdAt']),
+    .index('by_action_log', ['status', 'actionLog', 'createdAt'])
+    .index('by_public', ['isPublic', 'status', 'createdAt']),
 
   // Full engine state. SERVER ONLY: no query may return this table's rows (architecture §6).
   tableStates: defineTable({

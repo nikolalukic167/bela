@@ -34,6 +34,8 @@ function OnlineLobby() {
   const join = useMutation(api.tables.join);
   const [creating, setCreating] = useState(false);
   const [rated, setRated] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
+  const publicTables = useQuery(api.tables.publicLobby, {});
   const [timerProfile, setTimerProfile] = useState<TimerProfileName>('normal');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +47,21 @@ function OnlineLobby() {
     setError(null);
     try {
       const botLevel = o.botLevel === 'expert' ? 'hard' : o.botLevel;
-      const created = await create({ options: { ...o, botLevel }, rated: rated && ratingsOn, timerProfile });
+      const created = await create({ options: { ...o, botLevel }, rated: rated && ratingsOn, timerProfile, isPublic });
       navigate(`/t/${created}`);
     } catch (e) {
       fail(e);
+    }
+  };
+
+  const joinCode = async (target: string) => {
+    setError(null);
+    try {
+      const found = await join({ code: target });
+      if (found === null) setError(t('err.NOT_FOUND'));
+      else navigate(`/t/${found}`);
+    } catch (err) {
+      fail(err);
     }
   };
 
@@ -84,6 +97,11 @@ function OnlineLobby() {
                   {t('online.rated')}
                 </label>
               )}
+              <label className="label cursor-pointer gap-2">
+                <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+                {t('online.public')}
+              </label>
+              {isPublic && <p className="opacity-70 text-sm">{t('online.publicHint')}</p>}
               <label className="fieldset py-0">
                 <span className="fieldset-legend">{t('online.timer')}</span>
                 <select className="select select-sm" value={timerProfile} onChange={(e) => setTimerProfile(e.target.value as TimerProfileName)}>
@@ -121,6 +139,37 @@ function OnlineLobby() {
             </div>
           </form>
         </div>
+
+        <section aria-labelledby="public-tables">
+          <h2 id="public-tables" className="text-sm font-semibold uppercase tracking-widest opacity-70 mt-8 mb-3">
+            {t('online.publicTables')}
+          </h2>
+          {publicTables === undefined ? (
+            <span className="loading loading-spinner" />
+          ) : publicTables.length === 0 ? (
+            <p className="opacity-70">{t('online.publicNone')}</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {publicTables.map((x) => (
+                <li key={x.code} className="card card-side bg-base-200 items-center px-4 py-3 gap-3 flex-wrap">
+                  <span className="font-bold truncate">{x.host}</span>
+                  <span className="opacity-70 text-sm">
+                    {x.target} · {t(`online.timer.${x.timerProfile}`)} · {x.seatsTaken}/4
+                  </span>
+                  {x.rated && <span className="badge badge-primary badge-sm">{t('online.rated')}</span>}
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary ml-auto"
+                    aria-label={`${t('online.join')}: ${x.host}`}
+                    onClick={() => void joinCode(x.code)}
+                  >
+                    {t('online.join')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <h2 className="text-sm font-semibold uppercase tracking-widest opacity-70 mt-8 mb-3">{t('online.myTables')}</h2>
         {tables === undefined ? (

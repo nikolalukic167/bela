@@ -79,3 +79,21 @@ test('a quick table: the host picks the timer profile, and the move countdown st
   await expect(ana.page.getByRole('timer')).toBeVisible({ timeout: 5000 });
   expect(errors).toEqual([]);
 });
+
+test('public lobby: one player opens a public table, another finds it in the list and sits down', async ({ browser }) => {
+  const errors: string[] = [];
+  const ana = await guest(browser, 'Ana', errors);
+  await ana.page.getByRole('checkbox', { name: 'Javni stol' }).check();
+  await ana.page.getByRole('button', { name: 'Novi stol' }).click();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
+  await expect(ana.page.getByText('Javni', { exact: true })).toBeVisible();
+
+  const bruno = await guest(browser, 'Bruno', errors);
+  const publicList = bruno.page.getByRole('region', { name: 'Javni stolovi' });
+  await expect(publicList.getByText('Ana')).toBeVisible();
+  await publicList.getByRole('button', { name: 'Pridruži se: Ana' }).click();
+  await expect(bruno.page).toHaveURL(ana.page.url());
+  await expect(ana.page.getByText('Bruno')).toBeVisible();
+  expect(errors).toEqual([]);
+});
