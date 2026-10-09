@@ -422,7 +422,10 @@ export const rematch = mutation({
     const free = new Set<Id<'users'>>([user._id]);
     for (const s of table.seats as Seat[]) {
       const id = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
-      if (id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER) free.add(id);
+      // Nobody blocked with the player who asks is reseated (architecture §9.4).
+      if (id && id !== user._id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER && !(await blockedBetween(ctx, user._id, [id]))) {
+        free.add(id);
+      }
     }
     const seats = rematchSeats(table.seats as Seat[], (id) => free.has(id));
     const next = await uniqueCode(ctx);

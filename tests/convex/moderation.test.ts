@@ -65,6 +65,37 @@ describe('block', () => {
   });
 });
 
+describe('block and rematch', () => {
+  async function finished(t: Backend) {
+    const { ana, bruno, c } = await twoAtATable(t);
+    await ana.as.mutation(api.tables.start, { code: c });
+    await t.run(async (ctx) => {
+      const table = await ctx.db.query('tables').withIndex('by_code', (q) => q.eq('code', c)).unique();
+      await ctx.db.patch(table!._id, { status: 'finished', result: { scores: [501, 300], winner: 0 }, finishedAt: Date.now() });
+    });
+    return { ana, bruno, c };
+  }
+
+  it('the rematch leaves the seat of anyone blocked with the player who asked empty', async () => {
+    const t = newBackend();
+    const { ana, bruno, c } = await finished(t);
+    await bruno.as.mutation(api.moderation.block, { code: c, seat: 0 });
+    const next = await ana.as.mutation(api.tables.rematch, { code: c });
+    const w = await ana.as.query(api.tables.watch, { code: next });
+    expect(w?.seats.map((s) => s.kind)).toEqual(['user', 'empty', 'bot', 'bot']);
+    expect((await bruno.as.query(api.tables.mine, {})).map((m) => m.code)).not.toContain(next);
+  });
+
+  it('also when the blocker is the one who asks', async () => {
+    const t = newBackend();
+    const { ana, bruno, c } = await finished(t);
+    await bruno.as.mutation(api.moderation.block, { code: c, seat: 0 });
+    const next = await bruno.as.mutation(api.tables.rematch, { code: c });
+    expect((await bruno.as.query(api.tables.watch, { code: next }))?.seats.map((s) => s.kind)).toEqual(['empty', 'user', 'bot', 'bot']);
+    expect((await ana.as.query(api.tables.mine, {})).map((m) => m.code)).not.toContain(next);
+  });
+});
+
 describe('mute', () => {
   it('lists the muted seats at a table for the caller only', async () => {
     const t = newBackend();
