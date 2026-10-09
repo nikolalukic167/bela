@@ -10,7 +10,8 @@ export async function requireUser(ctx: Ctx): Promise<Doc<'users'>> {
   const id = await getAuthUserId(ctx);
   if (id === null) throw new TableError('UNAUTHENTICATED');
   const user = await ctx.db.get(id);
-  if (!user) throw new TableError('UNAUTHENTICATED');
+  // A deleted account's last token stays valid until it expires; it must not act any more.
+  if (!user || user.deletedAt !== undefined) throw new TableError('UNAUTHENTICATED');
   return user;
 }
 

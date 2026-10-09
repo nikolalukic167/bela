@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import { useI18n } from '../i18n/i18n';
@@ -7,6 +8,7 @@ import type { StringKey } from '../i18n/strings';
 import { errorKey } from '../online/errors';
 import { OnlineGate } from '../online/OnlineGate';
 import { AppShell } from '../ui/AppShell';
+import { Modal } from '../ui/Modal';
 import { useAccount } from './account';
 
 /** The signed-in player's own settings: name, blocked and muted players, account deletion. */
@@ -36,6 +38,7 @@ function Account() {
         <h1 className="text-2xl font-bold py-6">{t('account.title')}</h1>
         <RenameCard current={account.profile.name} />
         <PeopleCard />
+        <DeleteCard signOut={account.signOut} />
       </main>
     </AppShell>
   );
@@ -117,6 +120,60 @@ function PeopleCard() {
         {section('account.blockedTitle', 'account.blockedHint', 'account.noneBlocked', lists.blocked, 'mod.unblock', (userId) => unblock({ userId }))}
         {section('account.mutedTitle', 'mod.muteHint', 'account.noneMuted', lists.muted, 'mod.unmute', (userId) => unmute({ userId }))}
       </div>
+    </section>
+  );
+}
+
+/** GDPR deletion (architecture §9.2), behind an explicit confirmation. */
+function DeleteCard({ signOut }: { signOut: () => void }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const deleteAccount = useMutation(api.users.deleteAccount);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<StringKey | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteAccount({});
+      navigate('/');
+      signOut(); // the session is already gone on the server; this clears the browser's token
+    } catch (e) {
+      setError(errorKey(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card bg-base-200 mb-5">
+      <div className="card-body gap-3">
+        <h2 className="card-title">{t('account.deleteTitle')}</h2>
+        <p className="text-sm opacity-70">{t('account.deleteHint')}</p>
+        <button type="button" className="btn btn-error btn-outline self-start" onClick={() => setConfirming(true)}>
+          {t('account.delete')}
+        </button>
+      </div>
+      {confirming && (
+        <Modal title={t('account.deleteConfirmTitle')}>
+          <p className="mb-2">{t('account.deleteConfirm1')}</p>
+          <p className="font-bold">{t('account.deleteConfirm2')}</p>
+          {error && (
+            <div role="alert" className="alert alert-error alert-soft mt-3 text-sm">
+              {t(error)}
+            </div>
+          )}
+          <div className="modal-action">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setConfirming(false)}>
+              {t('settings.cancel')}
+            </button>
+            <button type="button" className="btn btn-error" disabled={busy} onClick={() => void confirm()}>
+              {t('account.deleteYes')}
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }

@@ -256,34 +256,42 @@ export const leave = mutation({
     const user = await requireUser(ctx);
     const table = await tableByCode(ctx, code);
     if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
-    const seats = table.seats as Seat[];
-    const seat = ownSeat(seats, user._id);
-    if (seat < 0) return;
-    await dropMembership(ctx, user._id, table._id);
-    await dropPresence(ctx, table._id, user._id);
-    if (table.status === 'finished') return;
-    if (table.status === 'playing' && table.rated) {
-      await abandon(ctx, table, user._id);
-      return;
-    }
-    // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
-    seats[seat] =
-      table.status === 'lobby'
-        ? { kind: 'empty' }
-        : { kind: 'bot', name: seats[seat].kind === 'empty' ? 'Bot' : seats[seat].name, level: botLevelOf(table) };
-    if (humanCount(seats) === 0) {
-      await deleteTable(ctx, table._id);
-      return;
-    }
-    const hostId =
-      table.hostId === user._id ? ((seats.find((s) => s.kind === 'user') as Extract<Seat, { kind: 'user' }>).userId) : table.hostId;
-    await ctx.db.patch(table._id, { seats, hostId });
-    if (table.status === 'playing') {
-      const row = await loadState(ctx, table._id);
-      await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, row);
-    }
+    await leaveTable(ctx, table, user._id);
   },
 });
+
+/**
+ * Takes a player off a table: a lobby seat is freed, a rated game is abandoned, and in a
+ * friendly game a bot keeps the seat for good, named `botName` (default: the player's name).
+ */
+export async function leaveTable(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users'>, botName?: string) {
+  const seats = table.seats as Seat[];
+  const seat = ownSeat(seats, userId);
+  if (seat < 0) return;
+  await dropMembership(ctx, userId, table._id);
+  await dropPresence(ctx, table._id, userId);
+  if (table.status === 'finished') return;
+  if (table.status === 'playing' && table.rated) {
+    await abandon(ctx, table, userId);
+    return;
+  }
+  // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
+  seats[seat] =
+    table.status === 'lobby'
+      ? { kind: 'empty' }
+      : { kind: 'bot', name: botName ?? (seats[seat].kind === 'empty' ? 'Bot' : seats[seat].name), level: botLevelOf(table) };
+  if (humanCount(seats) === 0) {
+    await deleteTable(ctx, table._id);
+    return;
+  }
+  const hostId =
+    table.hostId === userId ? ((seats.find((s) => s.kind === 'user') as Extract<Seat, { kind: 'user' }>).userId) : table.hostId;
+  await ctx.db.patch(table._id, { seats, hostId });
+  if (table.status === 'playing') {
+    const row = await loadState(ctx, table._id);
+    await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, row);
+  }
+}
 
 export const start = mutation({
   args: { code: v.string() },

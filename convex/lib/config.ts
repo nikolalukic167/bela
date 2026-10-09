@@ -32,3 +32,5 @@ export const REPORT_LIMIT = 10;
 export const REPORT_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** The name an admin gives a player whose name was reported as offensive. */
 export const NEUTRAL_NAME = 'Igrač';
+/** Shown wherever a player who deleted their account used to appear (architecture §9.2). */
+export const DELETED_NAME = 'Obrisani igrač';

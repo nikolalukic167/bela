@@ -45,6 +45,8 @@ export default defineSchema({
     isTest: v.optional(v.boolean()),
     /** Times of recent renames, for the rename rate limit (architecture §9.4). */
     renameTimes: v.optional(v.array(v.number())),
+    /** Set when the player deleted their account; the row stays, anonymised, for others' game records. */
+    deletedAt: v.optional(v.number()),
   })
     .index('email', ['email'])
     .index('phone', ['phone'])

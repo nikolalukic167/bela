@@ -248,6 +248,13 @@ const hr = {
   'account.mutedTitle': 'Utišani igrači',
   'account.noneBlocked': 'Nema blokiranih igrača.',
   'account.noneMuted': 'Nema utišanih igrača.',
+  'account.deleteTitle': 'Brisanje računa',
+  'account.deleteHint': 'Tvoje ime, prijava, rejting i blokade bit će obrisani. Odigrane partije ostaju u povijesti ostalih igrača, bez tvog imena.',
+  'account.delete': 'Obriši moj račun',
+  'account.deleteConfirmTitle': 'Trajno obrisati račun?',
+  'account.deleteConfirm1': 'Napuštaš sve stolove. U prijateljskoj partiji bot igra umjesto tebe, a rangiranu partiju gubiš predajom.',
+  'account.deleteConfirm2': 'Brisanje se ne može poništiti.',
+  'account.deleteYes': 'Da, obriši zauvijek',
 };
 
 const en: Record<keyof typeof hr, string> = {
@@ -498,6 +505,13 @@ const en: Record<keyof typeof hr, string> = {
   'account.mutedTitle': 'Muted players',
   'account.noneBlocked': 'No blocked players.',
   'account.noneMuted': 'No muted players.',
+  'account.deleteTitle': 'Delete account',
+  'account.deleteHint': "Your name, sign-in, rating and blocks are deleted. Finished games stay in the other players' history, without your name.",
+  'account.delete': 'Delete my account',
+  'account.deleteConfirmTitle': 'Delete your account for good?',
+  'account.deleteConfirm1': 'You leave every table. A bot takes your seat in a friendly game; a rated game is lost by forfeit.',
+  'account.deleteConfirm2': "This can't be undone.",
+  'account.deleteYes': 'Yes, delete for good',
 };
 
 export type StringKey = keyof typeof hr;
