@@ -82,7 +82,9 @@ test('a quick table: the host picks the timer profile, and the move countdown st
 
 test('public lobby: one player opens a public table, another finds it in the list and sits down', async ({ browser }) => {
   const errors: string[] = [];
-  const ana = await guest(browser, 'Ana', errors);
+  // A unique host name, so public tables left by earlier runs against the same backend don't match.
+  const host = `Ana ${Array.from({ length: 4 }, () => 'bcdfghjkmnprstvz'[Math.floor(Math.random() * 16)]).join('')}`;
+  const ana = await guest(browser, host, errors);
   await ana.page.getByRole('checkbox', { name: 'Javni stol' }).check();
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
@@ -91,8 +93,8 @@ test('public lobby: one player opens a public table, another finds it in the lis
 
   const bruno = await guest(browser, 'Bruno', errors);
   const publicList = bruno.page.getByRole('region', { name: 'Javni stolovi' });
-  await expect(publicList.getByText('Ana')).toBeVisible();
-  await publicList.getByRole('button', { name: 'Pridruži se: Ana' }).click();
+  await expect(publicList.getByText(host)).toBeVisible();
+  await publicList.getByRole('button', { name: `Pridruži se: ${host}` }).click();
   await expect(bruno.page).toHaveURL(ana.page.url());
   await expect(ana.page.getByText('Bruno')).toBeVisible();
   expect(errors).toEqual([]);
