@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advance, applyHumanAction, emptySeats, fillWithBots, startState, timeoutFor, type Seat } from '../../convex/lib/tableLogic';
-import { NEXT_HAND_TIMEOUT_MS, RECONNECT_GRACE_MS, TIMER_PROFILES, TURN_TIMEOUT_MS } from '../../convex/lib/config';
+import { HEARTBEAT_MS, NEXT_HAND_TIMEOUT_MS, RECONNECT_GRACE_MS, TIMER_PROFILES, TURN_TIMEOUT_MS } from '../../convex/lib/config';
 import { belaGame } from '../../src/games/bela/game';
 
 const human = (userId: string): Seat => ({ kind: 'user', userId: userId as never, name: userId });
@@ -29,9 +29,16 @@ describe('timeoutFor', () => {
 });
 
 describe('timer profiles (architecture §14.3)', () => {
-  it('"normal" is today\'s 90 s grace, 45 s per move and 30 s on the hand summary', () => {
+  it('the decided profiles (architecture §14): grace / move / hand summary', () => {
+    expect(TIMER_PROFILES.relaxed).toEqual({ graceMs: 120_000, turnMs: 60_000, nextHandMs: 40_000 });
+    expect(TIMER_PROFILES.normal).toEqual({ graceMs: 60_000, turnMs: 30_000, nextHandMs: 20_000 });
+    expect(TIMER_PROFILES.quick).toEqual({ graceMs: 30_000, turnMs: 15_000, nextHandMs: 10_000 });
+    // "normal" is the default and the same as the single-value constants.
     expect(TIMER_PROFILES.normal).toEqual({ graceMs: RECONNECT_GRACE_MS, turnMs: TURN_TIMEOUT_MS, nextHandMs: NEXT_HAND_TIMEOUT_MS });
-    expect([RECONNECT_GRACE_MS, TURN_TIMEOUT_MS, NEXT_HAND_TIMEOUT_MS]).toEqual([90_000, 45_000, 30_000]);
+  });
+
+  it('even the quick grace period outlasts at least two heartbeats, so one late beat never costs a seat', () => {
+    for (const p of Object.values(TIMER_PROFILES)) expect(p.graceMs).toBeGreaterThanOrEqual(2 * HEARTBEAT_MS);
   });
 
   it('relaxed gives more time than normal, quick less, for every timing', () => {

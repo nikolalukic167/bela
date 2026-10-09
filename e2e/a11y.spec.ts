@@ -42,6 +42,20 @@ test('the online lobby and a table lobby have no axe violations', async ({ brows
   expect(errors).toEqual([]);
 });
 
+test('the public lobby list and a public table lobby have no axe violations', async ({ browser }) => {
+  const errors: string[] = [];
+  const host = await guest(browser, 'Axe Javni', errors);
+  await host.page.getByRole('checkbox', { name: 'Javni stol' }).check();
+  await host.page.getByRole('button', { name: 'Novi stol' }).click();
+  await host.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
+  await expect(host.page.getByText('Javni', { exact: true })).toBeVisible();
+  await expectAccessible(host.page);
+  const visitor = await guest(browser, 'Axe Gost', errors);
+  await expect(visitor.page.getByRole('region', { name: 'Javni stolovi' }).getByText('Axe Javni')).toBeVisible();
+  await expectAccessible(visitor.page);
+  expect(errors).toEqual([]);
+});
+
 test('the tutorial guides a whole hand, played with the keyboard only', async ({ page }) => {
   test.setTimeout(3 * 60_000);
   const errors: string[] = [];

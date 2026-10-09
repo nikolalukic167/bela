@@ -11,8 +11,9 @@ const errCode = async (p: Promise<unknown>) => ((await p.then(() => null, (e) =>
 
 async function lobby(rated = false) {
   const t = newBackend();
-  const ana = await signUp(t, 'Ana');
-  const bruno = await signUp(t, 'Bruno');
+  // Rated tables seat account holders only (guests are turned away at join).
+  const ana = await signUp(t, 'Ana', { isAnonymous: !rated });
+  const bruno = await signUp(t, 'Bruno', { isAnonymous: !rated });
   const code = await ana.as.mutation(api.tables.create, { options: OPTIONS, rated });
   await bruno.as.mutation(api.tables.join, { code });
   return { t, ana, bruno, code };

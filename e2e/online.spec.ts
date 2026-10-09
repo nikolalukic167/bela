@@ -91,10 +91,30 @@ test('a quick table: the host picks the timer profile, and the move countdown st
   await ana.page.getByLabel('Vrijeme za potez').selectOption('quick');
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
-  await expect(ana.page.getByText('Brzo · 20 s')).toBeVisible();
+  await expect(ana.page.getByText('Brzo · 15 s')).toBeVisible();
   await ana.page.getByRole('button', { name: 'Pokreni igru' }).click();
-  // 20 s per move is inside the last-20-seconds countdown, so it shows right away (normal: after 25 s).
+  // 15 s per move is inside the last-20-seconds countdown, so it shows right away (normal: after 10 s).
   await expect(ana.page.getByRole('timer')).toBeVisible({ timeout: 5000 });
+  expect(errors).toEqual([]);
+});
+
+test('public lobby: one player opens a public table, another finds it in the list and sits down', async ({ browser }) => {
+  const errors: string[] = [];
+  // Unique names: display names are unique, and public tables left by earlier runs against the same backend must not match.
+  const host = `Ana ${Array.from({ length: 4 }, () => 'bcdfghjkmnprstvz'[Math.floor(Math.random() * 16)]).join('')}`;
+  const ana = await guest(browser, host, errors);
+  await ana.page.getByRole('checkbox', { name: 'Javni stol' }).check();
+  await ana.page.getByRole('button', { name: 'Novi stol' }).click();
+  await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
+  await expect(ana.page).toHaveURL(/#\/t\/[A-Z2-9]{8}$/);
+  await expect(ana.page.getByText('Javni', { exact: true })).toBeVisible();
+
+  const bruno = await guest(browser, `Bruno ${host.slice(4)}`, errors);
+  const publicList = bruno.page.getByRole('region', { name: 'Javni stolovi' });
+  await expect(publicList.getByText(host)).toBeVisible();
+  await publicList.getByRole('button', { name: `Pridruži se: ${host}` }).click();
+  await expect(bruno.page).toHaveURL(ana.page.url());
+  await expect(ana.page.getByText('Bruno')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
