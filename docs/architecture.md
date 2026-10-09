@@ -223,6 +223,7 @@ CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
 5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
 6. When (if ever) to open a public lobby; minimum concurrent-player threshold.
+7. 3- and 2-player Bela: the ten rule questions in [rules/bela.md](rules/bela.md#open-questions-need-a-decision-before-implementing) (3p pad, calling, discards, declarations, štiglja, ties, end of match; 2p seven swap, undealt stack, unconfirmed declarations). The engine has the seat count but refuses 2 and 3 seats until they are settled.
 
 ## 15. Guests, test data and the admin panel
 
