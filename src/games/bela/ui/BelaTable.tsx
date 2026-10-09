@@ -79,7 +79,11 @@ export function BelaTable() {
       <TableScreen
         view={view}
         onAct={act}
-        onMatchEnd={() => setShowSettings(true)}
+        // "Igraj ponovno": a new match at once, same options (full options stay under menu > Nova igra).
+        onMatchEnd={() => {
+          quit();
+          start(view.options);
+        }}
         gameActions={[{ label: t('nav.newGame'), onClick: () => setShowSettings(true) }]}
       />
       {showSettings && (

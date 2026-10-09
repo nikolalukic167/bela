@@ -75,3 +75,13 @@ describe('full matches between bots', () => {
     }
   });
 });
+
+describe('a finished match', () => {
+  it('stays finished: "next" never deals another hand', () => {
+    let s = setup({ ...OPTIONS, target: 501 }, 7);
+    for (let i = 0; i < 500 && s.phase !== 'matchOver'; i++) s = s.phase === 'handOver' ? apply(s, { type: 'next' }) : step(s);
+    expect(s.phase).toBe('matchOver');
+    expect(() => apply(s, { type: 'next' })).toThrow(/Illegal/);
+    expect(legalActions(s, 0)).toEqual([]);
+  });
+});
