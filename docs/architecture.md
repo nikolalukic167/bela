@@ -16,7 +16,7 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 | # | Phase | Delivers | Depends on | Status |
 |---|---|---|---|---|
 | 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | mostly done (`src/games/bela`) |
-| 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **in progress**: guests/username accounts, private tables, server-side bots, admin test tools built (see §15); reconnect timer, rated play and e2e still open |
+| 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **in progress**: guests/username accounts, private tables, server-side bots, admin test tools, reconnect with stand-in bots built (see §15); turn timers, rematch, rated play and e2e still open |
 | 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
 | 5 | **Competitive** | Seasons/leagues, tournaments (round-robin, brackets), clubs, replays, achievements | 3, 4 | |
@@ -90,7 +90,7 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 
 ## 6. Data model (Convex)
 
-Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are the first five rows; the rest is the plan.
+Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are the first six rows; the rest is the plan.
 
 | Table | Key fields | Notes |
 |---|---|---|
@@ -99,6 +99,7 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are 
 | `tableStates` | `tableId`, `state` (full engine state), `version` | **Server only**, never returned by any query. Separate table keeps it off accidental `ctx.db.get(table)` returns. `version` is bumped per action; scheduled steps carry the version they expect, so a stale one is a no-op. |
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
+| `presence` | `tableId`, `userId`, `lastSeen` | Last heartbeat per human at a running table. Separate from `tables` so heartbeats don't re-run every `watch` query. |
 | `games` | `tableId`, `players`, `result`, `rated`, `endedAt`, `endReason` (normal/abandoned) | One row per finished match. Planned (phase 3). |
 | `ratings` | `userId`, `scope` (`solo`\|`pair:<id>`), `mu`, `sigma`, `games` | OpenSkill (mu/sigma), not a single Elo number. Planned. |
 | `rating_history` | `ratingId`, `gameId`, `mu`, `sigma`, `at` | Feeds the rating graph. Planned. |
@@ -115,7 +116,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - **Act flow** (`tables.act`): resolve caller → seat from the table (never from args) → check it is that seat's turn → check `action ∈ legalActions` → `apply` → append to `actions` → bump `version` (optimistic concurrency; retry on conflict) → schedule next system step.
 - **Scheduled functions** drive everything time-based: bot moves (with a small human-like delay), trick collection, turn timers, reconnect grace expiry, abandoned-table cleanup. All idempotent and version-checked: a stale timer is a no-op.
 - **Bots** decide from `view(seat)` only, through the same `bot(v, rng)` used offline. Online tables offer easy / medium / hard: expert (PIMC, ~700 ms per move) would exceed Convex's mutation time limit, so it stays offline-only. A whole hard match costs about 75 ms of bot compute, so "fast" test tables play many moves per call. They are marked `{bot: true}` in seats and are excluded from rating updates (and make the game unrated).
-- **Reconnect:** a disconnected seat keeps its place. A timer (default 90 s, configurable per table) starts on disconnect; on expiry a bot takes over (friendly game continues) or the game ends as `abandoned` (rated game). Returning before expiry cancels the timer. An abandoning player in a rated game takes the loss; the others are not penalised.
+- **Reconnect:** an open table page sends `tables.heartbeat` every 20 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for 90 s (`RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. Still planned: per-table grace, and for rated games ending as `abandoned` with the loss on the absent player.
 - **Ratings:** on game end, one mutation writes `games`, updates `ratings` and appends `rating_history`, atomically. Only rated games with four humans (or the pair rule) qualify. Rating maths lives in `src/ratings/` as pure functions with tests.
 - **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`); the client maps them to translated messages. Never leak internal state in an error.
 
@@ -234,4 +235,6 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 
 **Limits.** At most 5 unfinished tables per user (`RATE_LIMITED`). Table codes are 6 characters from an unambiguous alphabet, generated with `crypto.getRandomValues`. Names are validated server-side (2–24 chars, no control characters).
 
-**Not yet built (phase 2 remainder):** disconnect detection and the reconnect grace timer (a seat is currently held until the player leaves), turn timers, rematch, rated play, Playwright e2e with two browser contexts.
+**Reconnect** is built (§7): heartbeats, a 90 s grace period, stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
+
+**Not yet built (phase 2 remainder):** turn timers, rematch, rated play, Playwright e2e with two browser contexts, cleanup of tables abandoned by everyone.

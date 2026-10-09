@@ -10,6 +10,7 @@ import {
   FAST_BATCH,
   MAX_ACTIVE_TABLES_PER_USER,
   NEXT_HAND_DELAY_MS,
+  RECONNECT_GRACE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
 import {
@@ -23,7 +24,11 @@ import {
   isFinished,
   makeCode,
   moverOf,
+  ownSeat,
+  presenceCheck,
+  reclaimSeat,
   seatOf,
+  standIn,
   startState,
   type Seat,
   type ServerBotLevel,
@@ -155,7 +160,7 @@ export const join = mutation({
     const table = await tableByCode(ctx, code);
     if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
     const seats = table.seats as Seat[];
-    if (seatOf(seats, user._id) >= 0) return table.code; // idempotent: rejoining restores the seat
+    if (ownSeat(seats, user._id) >= 0) return table.code; // idempotent: rejoining restores the seat
     if (table.status !== 'lobby') throw new TableError('WRONG_STATE');
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
@@ -212,6 +217,7 @@ async function dropMembership(ctx: MutationCtx, userId: Id<'users'>, tableId: Id
 
 async function deleteTable(ctx: MutationCtx, tableId: Id<'tables'>) {
   for (const m of await ctx.db.query('memberships').withIndex('by_table', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(m._id);
+  for (const p of await ctx.db.query('presence').withIndex('by_table_user', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(p._id);
   for (const s of await ctx.db.query('tableStates').withIndex('by_table', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(s._id);
   for (const a of await ctx.db.query('actions').withIndex('by_table_seq', (q) => q.eq('tableId', tableId)).collect()) await ctx.db.delete(a._id);
   await ctx.db.delete(tableId);
@@ -229,14 +235,16 @@ export const leave = mutation({
     const table = await tableByCode(ctx, code);
     if (!table || !visibleTo(table, user)) throw new TableError('NOT_FOUND');
     const seats = table.seats as Seat[];
-    const seat = seatOf(seats, user._id);
+    const seat = ownSeat(seats, user._id);
     if (seat < 0) return;
     await dropMembership(ctx, user._id, table._id);
+    await dropPresence(ctx, table._id, user._id);
     if (table.status === 'finished') return;
+    // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
     seats[seat] =
       table.status === 'lobby'
         ? { kind: 'empty' }
-        : { kind: 'bot', name: seats[seat].kind === 'user' ? (seats[seat] as { name: string }).name : 'Bot', level: botLevelOf(table) };
+        : { kind: 'bot', name: seats[seat].kind === 'empty' ? 'Bot' : seats[seat].name, level: botLevelOf(table) };
     if (humanCount(seats) === 0) {
       await deleteTable(ctx, table._id);
       return;
@@ -262,7 +270,79 @@ export const start = mutation({
     await ctx.db.patch(table._id, { seats, status: 'playing' });
     const rowId = await ctx.db.insert('tableStates', { tableId: table._id, state, version: 0 });
     const row = (await ctx.db.get(rowId))!;
+    for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table._id, s.userId);
     await scheduleNext(ctx, { ...table, seats, status: 'playing' } as Doc<'tables'>, row);
+  },
+});
+
+// ---------- reconnect ----------
+
+async function presenceRow(ctx: QueryCtx, tableId: Id<'tables'>, userId: Id<'users'>) {
+  return ctx.db.query('presence').withIndex('by_table_user', (q) => q.eq('tableId', tableId).eq('userId', userId)).unique();
+}
+
+async function dropPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<'users'>) {
+  const row = await presenceRow(ctx, tableId, userId);
+  if (row) await ctx.db.delete(row._id);
+}
+
+/** Records a heartbeat. A new row starts the presence-check chain for this seat. */
+async function touchPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<'users'>) {
+  const row = await presenceRow(ctx, tableId, userId);
+  if (row) {
+    await ctx.db.patch(row._id, { lastSeen: Date.now() });
+    return;
+  }
+  const presenceId = await ctx.db.insert('presence', { tableId, userId, lastSeen: Date.now() });
+  await ctx.scheduler.runAfter(RECONNECT_GRACE_MS, internal.tables.checkPresence, { presenceId });
+}
+
+/**
+ * Sent by an open table page every HEARTBEAT_MS. Keeps the seat, and gives it back to a
+ * returning player whose seat a bot was standing in for.
+ */
+export const heartbeat = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const user = await requireUser(ctx);
+    const table = await tableByCode(ctx, code);
+    if (!table || !visibleTo(table, user) || table.status !== 'playing') return;
+    const back = reclaimSeat(table.seats as Seat[], user._id);
+    if (back) {
+      await ctx.db.patch(table._id, { seats: back.seats });
+      // A table that waited for its players moves again; a pending stand-in step for this seat becomes a no-op.
+      await scheduleNext(ctx, { ...table, seats: back.seats } as Doc<'tables'>, await loadState(ctx, table._id));
+    } else if (seatOf(table.seats as Seat[], user._id) < 0) {
+      return;
+    }
+    await touchPresence(ctx, table._id, user._id);
+  },
+});
+
+/**
+ * Scheduled once per grace period per seated human (not per heartbeat, to keep the
+ * function-call budget small). Re-arms while the player is around; otherwise a bot stands in.
+ */
+export const checkPresence = internalMutation({
+  args: { presenceId: v.id('presence') },
+  handler: async (ctx, { presenceId }) => {
+    const row = await ctx.db.get(presenceId);
+    if (!row) return;
+    const table = await ctx.db.get(row.tableId);
+    const seat = table ? seatOf(table.seats as Seat[], row.userId) : -1;
+    if (!table || table.status !== 'playing' || seat < 0) {
+      await ctx.db.delete(row._id);
+      return;
+    }
+    const verdict = presenceCheck(row.lastSeen, Date.now(), RECONNECT_GRACE_MS);
+    if (!verdict.expired) {
+      await ctx.scheduler.runAt(verdict.recheckAt, internal.tables.checkPresence, { presenceId });
+      return;
+    }
+    await ctx.db.delete(row._id);
+    const seats = standIn(table.seats as Seat[], seat, botLevelOf(table));
+    await ctx.db.patch(table._id, { seats });
+    await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, await loadState(ctx, table._id));
   },
 });
 
@@ -304,7 +384,9 @@ function publicSeats(seats: Seat[], me: Id<'users'>) {
     seat,
     kind: s.kind,
     name: s.kind === 'empty' ? null : s.name,
-    isMe: s.kind === 'user' && s.userId === me,
+    isMe: (s.kind === 'user' && s.userId === me) || (s.kind === 'bot' && s.standInFor === me),
+    /** A bot is standing in for this player until they reconnect. */
+    away: s.kind === 'bot' && s.standInFor !== undefined,
   }));
 }
 
@@ -319,7 +401,8 @@ export const watch = query({
     const table = await tableByCode(ctx, code);
     if (!table || !visibleTo(table, user)) return null;
     const seats = table.seats as Seat[];
-    const mySeat = seatOf(seats, user._id);
+    // An away player still sees their seat, so the page doesn't flicker while the heartbeat reclaims it.
+    const mySeat = ownSeat(seats, user._id);
     let view = null;
     let spectating = false;
     if (table.status !== 'lobby') {
@@ -375,7 +458,7 @@ export const history = query({
       const t = await ctx.db.get(m.tableId);
       if (!t || t.isTest || t.status !== 'finished' || !t.result) continue;
       const seats = t.seats as Seat[];
-      const mine = seatOf(seats, user._id);
+      const mine = ownSeat(seats, user._id);
       if (mine < 0) continue;
       const team = mine % 2;
       const name = (seat: number) => (seats[seat].kind === 'empty' ? '' : (seats[seat] as { name: string }).name);

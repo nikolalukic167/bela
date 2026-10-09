@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from 'convex/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
+import { HEARTBEAT_MS } from '../../convex/lib/config';
 import type { BelaAction } from '../games/bela/state';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
@@ -27,6 +28,7 @@ function OnlineTable({ code }: { code: string }) {
   const act = useMutation(api.tables.act);
   const leave = useMutation(api.tables.leave);
   const [error, setError] = useState<string | null>(null);
+  useHeartbeat(code, data?.status === 'playing' && data.mySeat !== null);
 
   const guard = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -60,7 +62,7 @@ function OnlineTable({ code }: { code: string }) {
   }
 
   if (data.view) {
-    const names = data.seats.map((s) => s.name);
+    const names = data.seats.map((s) => (s.away ? `${s.name} (${t('online.awayShort')})` : s.name));
     const leaveGame = () => window.confirm(t('online.leaveRunning')) && guard(async () => {
       await leave({ code });
       navigate('/online');
@@ -87,6 +89,26 @@ function OnlineTable({ code }: { code: string }) {
   }
 
   return <TableLobby data={data} code={code} error={error} guard={guard} />;
+}
+
+/**
+ * Tells the server this player is still at the table. After the reconnect grace period
+ * without one, a bot stands in; the first heartbeat after returning takes the seat back.
+ */
+function useHeartbeat(code: string, active: boolean) {
+  const heartbeat = useMutation(api.tables.heartbeat);
+  useEffect(() => {
+    if (!active) return;
+    const beat = () => void heartbeat({ code }).catch(() => {}); // a missed beat is harmless: the next one retries
+    beat();
+    const id = window.setInterval(beat, HEARTBEAT_MS);
+    const onVisible = () => document.visibilityState === 'visible' && beat();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [code, active, heartbeat]);
 }
 
 function TableLobby({ data, code, error, guard }: { data: Watched; code: string; error: string | null; guard: (fn: () => Promise<unknown>) => Promise<void> }) {
@@ -185,7 +207,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
                       <span className="truncate text-sm text-base-content/70">
                         {s.kind === 'empty'
                           ? t('online.emptyHint')
-                          : [s.isMe && t('online.you'), s.kind === 'bot' && t('online.bot'), data.isHost && s.isMe && t('online.host')]
+                          : [s.isMe && t('online.you'), s.away ? t('online.away') : s.kind === 'bot' && t('online.bot'), data.isHost && s.isMe && t('online.host')]
                               .filter(Boolean)
                               .join(' · ')}
                       </span>

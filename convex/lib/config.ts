@@ -5,6 +5,10 @@ export const AUTO_DELAY_MS = 1100;
 export const NEXT_HAND_DELAY_MS = 4000;
 /** 'fast' tables play this many moves per scheduled call. */
 export const FAST_BATCH = 150;
+/** How long a dropped player's seat is held before a bot stands in (architecture §7). */
+export const RECONNECT_GRACE_MS = 90_000;
+/** Open table pages report in this often; a few missed beats fit inside the grace period. */
+export const HEARTBEAT_MS = 20_000;
 export const MAX_ACTIVE_TABLES_PER_USER = 5;
 export const MAX_NAME_LENGTH = 24;
 export const MIN_NAME_LENGTH = 2;

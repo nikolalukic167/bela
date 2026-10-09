@@ -1,7 +1,7 @@
 // @vitest-environment edge-runtime
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../convex/_generated/api';
-import { newBackend, OPTIONS, signUp } from './setup';
+import { elapse, newBackend, OPTIONS, signUp } from './setup';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -118,11 +118,11 @@ describe('playing', () => {
     await host.as.mutation(api.tables.act, { code: c, action: { type: 'pass' } });
     expect((await host.as.query(api.tables.watch, { code: c }))?.view?.isMyTurn).toBe(false);
     // Seat 1 is the friend (human): the game waits for them, no bot acts.
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await elapse(t, 10_000); // bots answer; well inside the reconnect grace period
     const v = (await friend.as.query(api.tables.watch, { code: c }))?.view;
     expect(v?.isMyTurn).toBe(true);
     await friend.as.mutation(api.tables.act, { code: c, action: { type: 'pass' } });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await elapse(t, 10_000); // bots answer; well inside the reconnect grace period
     // Seats 2 and 3 are bots: by now one of them has called trump (the dealer must).
     const after = (await host.as.query(api.tables.watch, { code: c }))?.view;
     expect(after?.phase).not.toBe('trump');
@@ -164,7 +164,7 @@ describe('playing', () => {
     const { t, host, friend, c } = await startedTable();
     await host.as.mutation(api.tables.act, { code: c, action: { type: 'pass' } });
     await friend.as.mutation(api.tables.leave, { code: c });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await elapse(t, 10_000); // bots answer; well inside the reconnect grace period
     const w = await host.as.query(api.tables.watch, { code: c });
     expect(w?.seats[1].kind).toBe('bot');
     expect(w?.view?.phase).not.toBe('trump');
