@@ -93,9 +93,28 @@ function BelaPanel({ online }: { online: boolean }) {
             </div>
           </fieldset>
           <div className="flex flex-col gap-2.5">
-            <button type="button" className="btn btn-primary h-[52px] rounded-2xl text-[17px]" onClick={play}>
-              {t('home.playBots')}
-            </button>
+            {resumable ? (
+              <>
+                <Link to="/play/bela" className="btn btn-primary h-auto min-h-[52px] flex-col gap-0 rounded-2xl py-2 text-[17px]">
+                  {t('home.resume')}
+                  <span className="text-xs font-normal tabular-nums opacity-80">
+                    {t('home.continueInfo')
+                      .replace('{hand}', String(resumable.handNo + 1))
+                      .replace('{us}', t('team.us'))
+                      .replace('{them}', t('team.them'))
+                      .replace('{usScore}', String(resumable.scores[0]))
+                      .replace('{themScore}', String(resumable.scores[1]))}
+                  </span>
+                </Link>
+                <button type="button" className="btn btn-outline h-[52px] rounded-2xl border-accent text-[17px]" onClick={play}>
+                  {t('home.newGame')}
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn btn-primary h-[52px] rounded-2xl text-[17px]" onClick={play}>
+                {t('home.playBots')}
+              </button>
+            )}
             {online && (
               <Link to="/online" className="btn btn-outline h-[52px] rounded-2xl border-accent text-[17px]">
                 {t('home.playOnline')}
@@ -104,22 +123,6 @@ function BelaPanel({ online }: { online: boolean }) {
           </div>
         </div>
       </div>
-      {resumable && (
-        <Link to="/play/bela" className="card card-side items-center justify-between rounded-2xl bg-base-300 px-4 py-4">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-base-content/70">{t('home.continue')}</div>
-            <div className="font-medium tabular-nums">
-              {t('home.continueInfo')
-                .replace('{hand}', String(resumable.handNo))
-                .replace('{us}', t('team.us'))
-                .replace('{them}', t('team.them'))
-                .replace('{usScore}', String(resumable.scores[0]))
-                .replace('{themScore}', String(resumable.scores[1]))}
-            </div>
-          </div>
-          <span className="text-2xl text-primary" aria-hidden="true">›</span>
-        </Link>
-      )}
     </div>
   );
 }

@@ -48,7 +48,7 @@ export function BelaTable() {
   // Home's "Igraj protiv botova" arrives with the chosen strength and starts straight away.
   const autostart = (useLocation().state as { autostart?: BotLevel } | null)?.autostart;
   useEffect(() => {
-    if (view || !autostart || !BOT_LEVELS.includes(autostart)) return;
+    if (!autostart || !BOT_LEVELS.includes(autostart)) return;
     const o = { ...belaGame.defaultOptions, botLevel: autostart };
     setLastOptions(o);
     newGame(o);
@@ -184,18 +184,28 @@ function ScoreBar({ view }: { view: SeatView }) {
   );
 }
 
-/** The called suit, always on screen (navbar on phones, sidebar on desktop). */
+/** The called suit and who called it, always on screen (navbar on phones, sidebar on desktop). */
 function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
   const { t } = useI18n();
+  const names = useContext(SeatNames);
   if (!view.trump) return null;
+  const caller =
+    view.callerSeat === null ? null : (names?.[view.callerSeat] ?? t(SEAT_NAME[positionOf(view.callerSeat, view.options, view.seat)]));
   return (
     <div
-      className={`flex flex-col items-center rounded-xl bg-[#fbfaf5] text-neutral leading-none ${large ? 'px-5 py-2' : 'min-w-14 px-3 py-1'}`}
+      className={`flex flex-col items-center rounded-xl bg-[#fbfaf5] text-neutral leading-none ${large ? 'px-5 py-2' : 'min-w-14 max-w-24 px-2.5 py-1'}`}
       role="status"
-      aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}`}
+      aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}${caller ? `, ${t('trump.calledBy')} ${caller}` : ''}`}
     >
       <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
-      <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}><SuitMark suit={view.trump} /></span>
+      <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}>
+        <SuitMark suit={view.trump} />
+      </span>
+      {caller && (
+        <span className={`max-w-full truncate font-medium opacity-80 ${large ? 'mt-1 text-sm' : 'text-[10px]'}`}>
+          {t('trump.calledBy')} {caller}
+        </span>
+      )}
     </div>
   );
 }
