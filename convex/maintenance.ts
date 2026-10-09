@@ -1,8 +1,8 @@
-// Scheduled housekeeping (crons.ts, architecture §12): the quota watch.
+// Scheduled housekeeping (crons.ts, architecture §12): the quota watch and action-log compaction.
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalMutation, type QueryCtx } from './_generated/server';
-import { CALLS_PER_ACTION, QUOTA_CALLS_PER_MONTH, QUOTA_WARN_AT } from './lib/config';
+import { ACTION_LOG_TTL_MS, CALLS_PER_ACTION, QUOTA_CALLS_PER_MONTH, QUOTA_WARN_AT } from './lib/config';
 import { logEvent } from './lib/log';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -65,3 +65,46 @@ export async function usageReport(ctx: QueryCtx) {
     warn: estimatedCalls >= QUOTA_CALLS_PER_MONTH * QUOTA_WARN_AT,
   };
 }
+
+/** Tables looked at per call. */
+const COMPACT_BATCH = 100;
+
+/**
+ * Daily: deletes the move log of finished, unrated, real tables that ended ACTION_LOG_TTL_MS ago.
+ * The games row and the final state stay, so history and stats are unaffected; rated logs are
+ * kept for replays and disputes. Every table it looks at is marked, so it is never looked at
+ * again; when the delete budget runs out it continues in a follow-up call.
+ */
+export const compactLogs = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - ACTION_LOG_TTL_MS;
+    // createdAt <= finishedAt, so this range holds every table that finished before the cutoff.
+    const due = await ctx.db
+      .query('tables')
+      .withIndex('by_action_log', (q) => q.eq('status', 'finished').eq('actionLog', undefined).lte('createdAt', cutoff))
+      .take(COMPACT_BATCH);
+    let budget = PAGE;
+    let done = 0;
+    for (const t of due) {
+      if ((t.finishedAt ?? t.createdAt) > cutoff) continue; // a long match that ended recently: later
+      if (t.rated || t.isTest) {
+        await ctx.db.patch(t._id, { actionLog: 'kept' });
+        done++;
+        continue;
+      }
+      const rows = await ctx.db.query('actions').withIndex('by_table_seq', (q) => q.eq('tableId', t._id)).take(budget);
+      for (const r of rows) await ctx.db.delete(r._id);
+      if (rows.length === budget) {
+        budget = 0; // this table may have more: finish it in the next call
+        break;
+      }
+      budget -= rows.length;
+      await ctx.db.patch(t._id, { actionLog: 'compacted' });
+      done++;
+    }
+    logEvent('compaction.done', { count: done });
+    if (budget === 0 || (done > 0 && due.length === COMPACT_BATCH)) await ctx.scheduler.runAfter(0, internal.maintenance.compactLogs, {});
+  },
+});
+

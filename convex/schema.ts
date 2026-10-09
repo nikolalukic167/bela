@@ -73,11 +73,14 @@ export default defineSchema({
     codeExpiresAt: v.optional(v.number()),
     /** Clock for this table (lib/config TIMER_PROFILES), set at creation; absent means 'normal'. */
     timerProfile: v.optional(timerProfileValidator),
+    /** Set by the compaction cron: 'compacted' (move log deleted) or 'kept' (rated or test). */
+    actionLog: v.optional(v.union(v.literal('compacted'), v.literal('kept'))),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])
     .index('by_host', ['hostId'])
-    .index('by_test', ['isTest', 'createdAt']),
+    .index('by_test', ['isTest', 'createdAt'])
+    .index('by_action_log', ['status', 'actionLog', 'createdAt']),
 
   // Full engine state. SERVER ONLY: no query may return this table's rows (architecture §6).
   tableStates: defineTable({

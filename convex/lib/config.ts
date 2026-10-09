@@ -65,4 +65,5 @@ export const QUOTA_CALLS_PER_MONTH = 1_000_000;
 export const QUOTA_WARN_AT = 0.7;
 /** Function calls per stored move: the mutation plus the `watch` re-runs it triggers (~2,300 per match). */
 export const CALLS_PER_ACTION = 5;
-
+/** Finished unrated tables lose their move log after this; the games row stays (architecture §12). */
+export const ACTION_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;

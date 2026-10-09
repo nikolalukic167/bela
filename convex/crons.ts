@@ -8,4 +8,6 @@ crons.daily('delete abandoned tables', { hourUTC: 3, minuteUTC: 17 }, internal.t
 
 crons.daily('count usage for the quota watch', { hourUTC: 2, minuteUTC: 43 }, internal.maintenance.countUsage, {});
 
+crons.daily('compact old friendly action logs', { hourUTC: 4, minuteUTC: 7 }, internal.maintenance.compactLogs, {});
+
 export default crons;
