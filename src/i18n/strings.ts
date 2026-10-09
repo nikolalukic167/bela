@@ -334,6 +334,9 @@ const hr = {
   'privacy.retention.body': "- Stolovi koji nikad nisu počeli i partije koje su svi napustili brišu se nakon 24 sata.\n- Završene partije, rejting i račun ostaju dok ne obrišeš račun.\n- Račun gosta ostaje na poslužitelju i kad obrišeš podatke preglednika. Ako to ne želiš, prvo ga obriši u Moj račun.",
   'privacy.delete.title': 'Brisanje računa',
   'privacy.delete.body': 'U izborniku: Moj račun → Obriši moj račun. Odmah se brišu tvoje ime, prijava (lozinka, veza s Googleom, sesije), rejting i njegova povijest, blokade, utišavanja i prijave. Napuštaš sve stolove: u prijateljskoj partiji bot preuzima tvoje mjesto, a rangiranu partiju gubiš predajom. Završene partije ostaju u povijesti ostalih igrača, s „Obrisani igrač” umjesto tvog imena. Iznimka: ako si prije napustio partiju koja je još trajala, bot je tamo nastavio pod tvojim imenom i to ime ostaje u toj partiji.',
+  'err.NAME_TAKEN': 'To ime je zauzeto. Odaberi drugo.',
+  'name.suggest': 'Slobodno je: {name}',
+  'name.useSuggestion': 'Uzmi to ime',
 };
 
 const en: Record<keyof typeof hr, string> = {
@@ -670,6 +673,9 @@ const en: Record<keyof typeof hr, string> = {
   'privacy.retention.body': "- Tables that never started and games everyone walked away from are deleted after 24 hours.\n- Finished games, your rating and your account stay until you delete your account.\n- A guest account stays on the server even after you clear your browser's data. If you don't want that, delete it under My account first.",
   'privacy.delete.title': 'Deleting your account',
   'privacy.delete.body': "In the menu: My account → Delete my account. Your name, sign-in (password, Google link, sessions), rating and its history, blocks, mutes and reports are deleted right away. You leave every table: a bot takes your seat in a friendly game, and a rated game is lost by forfeit. Finished games stay in the other players' history, with “Obrisani igrač” (deleted player) instead of your name. One exception: if you earlier left a game that was still running, a bot played on there under your name, and that name stays in that game.",
+  'err.NAME_TAKEN': 'That name is taken. Please pick another.',
+  'name.suggest': 'Free: {name}',
+  'name.useSuggestion': 'Use this name',
 };
 
 export type StringKey = keyof typeof hr;

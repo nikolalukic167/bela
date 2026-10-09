@@ -5,6 +5,8 @@ import { convexAuth } from '@convex-dev/auth/server';
 import { emailToUsername } from '../src/account/username';
 import { TableError } from './lib/errors';
 import { acceptName, isOffensive } from './lib/names';
+import { onUserStored } from './lib/uniqueNames';
+import type { MutationCtx } from './_generated/server';
 
 // Three ways in; none is required for local play:
 //  - Guest: a display name, no credentials. The session lives in the browser.
@@ -29,4 +31,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       },
     }),
   ],
+  callbacks: {
+    // Runs in the mutation that stores the user: unique display names (architecture §14.1).
+    afterUserCreatedOrUpdated: (ctx, args) => onUserStored(ctx as unknown as MutationCtx, args),
+  },
 });
