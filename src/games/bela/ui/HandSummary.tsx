@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { SuitMark } from '../../../ui/decks';
-import { useI18n } from '../../../i18n/i18n';
+import { fmt, useI18n } from '../../../i18n/i18n';
+import { HomeIcon } from '../../../ui/icons';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import type { SeatView } from '../view';
 
@@ -21,7 +22,7 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
     <Modal title={title}>
       <p className="mb-2">
         {t('trump.label')}: <span className={`suit suit--${r.trump} text-xl`}><SuitMark suit={r.trump} /></span> ·{' '}
-        {t('trump.calledBy')} {t(r.caller === 0 ? 'team.us' : 'team.them')}
+        {fmt(t('trump.calledBy'), { name: t(r.caller === 0 ? 'team.us' : 'team.them') })}
       </p>
       <table className="table table-sm tabular-nums">
         <thead>
@@ -48,6 +49,7 @@ export function HandSummary({ view, onNext, onNewGame }: { view: SeatView; onNex
         {over ? (
           <>
             <button type="button" className="btn" onClick={() => navigate('/')}>
+              <HomeIcon />
               {t('match.menu')}
             </button>
             <button type="button" className="btn btn-primary" onClick={onNewGame}>

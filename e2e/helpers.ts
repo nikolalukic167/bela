@@ -23,7 +23,7 @@ export async function guest(browser: Browser, name: string, errors: string[]): P
 
 /** Plays the signed-in seat's turns (call trump, first playable card) until the hand summary shows. */
 export async function playHand(page: Page) {
-  const summary = page.getByRole('dialog').filter({ hasText: /Kraj partije|Pad|Prolaz/ });
+  const summary = page.getByRole('dialog').filter({ hasText: /Kraj ruke|Pad|Prolaz/ });
   for (let i = 0; i < 600 && !(await summary.isVisible()); i++) {
     const trump = page.locator('.trump-btn').first();
     const card = page.locator('.hand .hand-card:not(.hand-card--talon):not([disabled])').first();

@@ -8,6 +8,7 @@ import type { BelaAction } from '../games/bela/state';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
+import { ArrowLeftIcon } from '../ui/icons';
 import { errorKey } from './errors';
 import { OnlineGate } from './OnlineGate';
 import { PlayersDialog } from './PlayersDialog';
@@ -64,6 +65,7 @@ function OnlineTable({ code }: { code: string }) {
         <main className="mx-auto max-w-xl px-4 py-12 text-center">
           <p className="mb-4">{t('online.notFound')}</p>
           <Link to="/online" className="btn btn-primary">
+            <ArrowLeftIcon />
             {t('online.back')}
           </Link>
         </main>
@@ -322,6 +324,7 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
             </button>
           )}
           <Link to="/online" className="btn btn-ghost">
+            <ArrowLeftIcon />
             {t('online.back')}
           </Link>
         </div>

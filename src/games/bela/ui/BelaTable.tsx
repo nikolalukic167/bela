@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SUITS, cardId, sameCard, type Card as CardT, type Suit } from '../../../core/cards';
-import { useI18n } from '../../../i18n/i18n';
+import { fmt, useI18n } from '../../../i18n/i18n';
 import type { StringKey } from '../../../i18n/strings';
 import { Card } from '../../../ui/Card';
-import { SuitMark } from '../../../ui/decks';
+import { SuitMark, useCardNames } from '../../../ui/decks';
 import { AppShell, type MenuAction } from '../../../ui/AppShell';
 import { Modal, ModalActions } from '../../../ui/Modal';
 import { SPEED_DELAYS, useSettings } from '../../../ui/settings';
@@ -153,7 +153,7 @@ export function TableScreen({ view: rawView, onAct, onMatchEnd, gameActions = []
             <ScoreSheet view={view} />
             <ModalActions>
               <button type="button" className="btn" onClick={() => setShowSheet(false)}>
-                {t('settings.cancel')}
+                {t('mod.close')}
               </button>
             </ModalActions>
           </Modal>
@@ -192,6 +192,7 @@ function ScoreBar({ view }: { view: SeatView }) {
 /** The called suit and who called it, always on screen (navbar on phones, sidebar on desktop). */
 function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
   const { t } = useI18n();
+  const cardNames = useCardNames();
   const names = useContext(SeatNames);
   if (!view.trump) return null;
   const caller =
@@ -200,7 +201,7 @@ function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
     <div
       className={`flex flex-col items-center rounded-xl bg-[#fbfaf5] text-neutral leading-none ${large ? 'px-5 py-2' : 'min-w-14 max-w-24 px-2.5 py-1'}`}
       role="status"
-      aria-label={`${t('trump.label')}: ${t(`suit.${view.trump}` as StringKey)}${caller ? `, ${t('trump.calledBy')} ${caller}` : ''}`}
+      aria-label={`${t('trump.label')}: ${cardNames.suit(view.trump)}${caller ? `, ${fmt(t('trump.calledBy'), { name: caller })}` : ''}`}
     >
       <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{t('trump.label')}</span>
       <span className={`suit suit--${view.trump} ${large ? 'text-5xl' : 'text-2xl'} leading-tight`}>
@@ -208,7 +209,7 @@ function TrumpTile({ view, large }: { view: SeatView; large?: boolean }) {
       </span>
       {caller && (
         <span className={`max-w-full truncate font-medium opacity-80 ${large ? 'mt-1 text-sm' : 'text-[10px]'}`}>
-          {t('trump.calledBy')} {caller}
+          {fmt(t('trump.calledBy'), { name: caller })}
         </span>
       )}
     </div>
@@ -219,6 +220,7 @@ type Act = (a: BelaAction) => void;
 
 function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
+  const cardNames = useCardNames();
   const [selected, setSelected] = useState<CardT | null>(null);
   useEffect(() => setSelected(null), [view.isMyTurn, view.phase]);
 
@@ -238,7 +240,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
           <Opponent key={s.seat} view={view} seat={s.seat} />
         ))}
 
-      <div className="trick" aria-label="trick">
+      <div className="trick" aria-label={t('table.trick')}>
         {view.trick.map((p) => (
           <Card
             key={cardId(p.card)}
@@ -261,7 +263,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
               key={cardId(c)}
               card={c}
               className="hand-card"
-              label={`${c.rank} ${t(`suit.${c.suit}` as StringKey)}`}
+              label={cardNames.card(c)}
               onClick={() => play(c)}
               disabled={playing ? !canPlay(c) : false}
               selected={!!selected && sameCard(selected, c)}
@@ -280,7 +282,7 @@ function Table({ view, onAct }: { view: SeatView; onAct: Act }) {
               {selected && (
                 <>
                   {' '}
-                  {selected.rank}
+                  {cardNames.rank(selected.rank)}
                   <span className={`suit suit--${selected.suit}`}><SuitMark suit={selected.suit} /></span>
                 </>
               )}
@@ -315,7 +317,7 @@ function Opponent({ view, seat }: { view: SeatView; seat: number }) {
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-sm font-bold">
             {name}
-            {info.isDealer && <sup className="ml-0.5 text-[10px] opacity-70" title="dealer">D</sup>}
+            {info.isDealer && <sup className="ml-0.5 text-[10px] opacity-70" title={t('trump.dealer')}>D</sup>}
           </span>
           <span className="truncate text-xs text-base-content/70">{note}</span>
           {info.bela && <span className="badge badge-xs badge-error mt-0.5 self-center">{t('decl.bela')}</span>}
@@ -339,7 +341,7 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
         {note && <em className="font-normal">{note}</em>}
       </span>
       {info.isDealer && (
-        <span className="badge badge-xs badge-soft" title="dealer">
+        <span className="badge badge-xs badge-soft" title={t('trump.dealer')}>
           D
         </span>
       )}
@@ -350,6 +352,7 @@ function SeatBubble({ view, seat }: { view: SeatView; seat: number }) {
 
 function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
   const { t } = useI18n();
+  const cardNames = useCardNames();
   const names = useContext(SeatNames);
   const count = (suit: Suit) => view.hand.filter((c) => c.suit === suit).length;
   // Others first as they sit around the table, then us; the call goes to whoever is up.
@@ -403,7 +406,7 @@ function TrumpPicker({ view, onAct }: { view: SeatView; onAct: Act }) {
                 <span className="text-xs font-medium">
                   {n} {t(n === 1 ? 'trump.count1' : 'trump.countN')}
                 </span>
-                <span className="sr-only">{t(`suit.${suit}` as StringKey)}</span>
+                <span className="sr-only">{cardNames.suit(suit)}</span>
               </button>
             );
           })}
@@ -446,6 +449,7 @@ const TRUMP_TOAST_MS = 2500;
 /** Briefly announces who called trump, but only when the call happens in front of us. */
 function TrumpToast({ view }: { view: SeatView }) {
   const { t } = useI18n();
+  const cardNames = useCardNames();
   const names = useContext(SeatNames);
   const before = useRef({ hand: view.handNo, trump: view.trump });
   const [call, setCall] = useState<{ id: number; seat: number; suit: Suit } | null>(null);
@@ -480,7 +484,7 @@ function TrumpToast({ view }: { view: SeatView }) {
     >
       <span className={`suit suit--${call.suit} text-3xl leading-none`}><SuitMark suit={call.suit} /></span>
       <span className="font-bold">
-        {who} {t('trump.announce')}: {t(`suit.${call.suit}` as StringKey)}
+        {fmt(t('trump.announce'), { suit: cardNames.suit(call.suit), name: who })}
       </span>
     </div>
   );

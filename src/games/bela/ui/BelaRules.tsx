@@ -1,20 +1,41 @@
+import type { Card as CardT, Rank } from '../../../core/cards';
 import { useI18n } from '../../../i18n/i18n';
+import { Card } from '../../../ui/Card';
+import { useCardNames } from '../../../ui/decks';
 
-const Points = ({ trump }: { trump: boolean }) => (
-  <table className="table table-sm w-auto">
-    <tbody>
-      {(trump
-        ? [['J', 20], ['9', 14], ['A', 11], ['10', 10], ['K', 4], ['Q', 3], ['8', 0], ['7', 0]]
-        : [['A', 11], ['10', 10], ['K', 4], ['Q', 3], ['J', 2], ['9', 0], ['8', 0], ['7', 0]]
-      ).map(([r, p]) => (
-        <tr key={r}>
-          <th scope="row">{r}</th>
-          <td>{p}</td>
-        </tr>
+const TRUMP: [Rank, number][] = [['J', 20], ['9', 14], ['A', 11], ['10', 10], ['K', 4], ['Q', 3], ['8', 0], ['7', 0]];
+const PLAIN: [Rank, number][] = [['A', 11], ['10', 10], ['K', 4], ['Q', 3], ['J', 2], ['9', 0], ['8', 0], ['7', 0]];
+
+/** Card values, with rank letters from the viewer's deck (U/O on Hungarian cards, J/Q on French). */
+function Points({ trump }: { trump: boolean }) {
+  const { rank } = useCardNames();
+  return (
+    <table className="table table-sm w-auto">
+      <tbody>
+        {(trump ? TRUMP : PLAIN).map(([r, p]) => (
+          <tr key={r}>
+            <th scope="row">{rank(r)}</th>
+            <td>{p}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const SHOWCASE: CardT[] = (['A', 'K', 'Q', 'J'] as Rank[]).map((rank) => ({ suit: 'hearts', rank }));
+
+/** The four highest hearts in the viewer's deck, so the names below match what they see at the table. */
+function Showcase() {
+  const { card } = useCardNames();
+  return (
+    <div className="not-prose flex gap-2" style={{ '--cw': '64px' } as React.CSSProperties}>
+      {SHOWCASE.map((c) => (
+        <Card key={c.rank} card={c} label={card(c)} />
       ))}
-    </tbody>
-  </table>
-);
+    </div>
+  );
+}
 
 export function BelaRules() {
   const { lang } = useI18n();
@@ -29,9 +50,17 @@ function Hr() {
         Bela (belot) igra se s 32 karte (7, 8, 9, 10, dečko, dama, kralj, as u četiri boje). Igraju četiri igrača u dva para;
         partneri sjede jedan nasuprot drugome. Igra se suprotno od smjera kazaljke na satu.
       </p>
+      <h2>Karte</h2>
+      <p>
+        Igra se s mađaricama ili s francuskim kartama, kako ti je draže (Izbornik → Postavke → Špil karata). Na mađaricama su
+        boje <strong>srce</strong>, <strong>bundeva</strong>, <strong>žir</strong> i <strong>zelje</strong> (kao herc, karo,
+        tref i pik), a umjesto dečka i dame su <strong>unter</strong> (U) i <strong>ober</strong> (O). Asovi prikazuju četiri
+        godišnja doba.
+      </p>
+      <Showcase />
       <h2>Dijeljenje i zvanje aduta</h2>
       <p>
-        Svaki igrač dobije 6 karata, a 2 karte (talon) ostaju skrivene. Počevši od igrača do djelitelja, svatko može zvati adut
+        Svaki igrač dobije 6 karata, a 2 karte (talon) ostaju skrivene do zvanja aduta. Počevši od igrača do djelitelja, svatko može zvati adut
         ili reći „dalje”. Ako svi kažu dalje, djelitelj <em>mora</em> zvati (mus). Nakon zvanja svatko uzima svoje 2 karte iz
         talona.
       </p>
@@ -67,7 +96,7 @@ function Hr() {
       <h2>Bodovanje</h2>
       <ul>
         <li>Par koji je zvao mora imati više od polovice ukupnih bodova (karte + zvanja + bela). Inače je <strong>pad</strong> i protivnici dobivaju sve.</li>
-        <li>Ako su bodovi točno jednaki, bodovi zvača <strong>vise</strong> i dobiva ih pobjednik iduće partije.</li>
+        <li>Ako su bodovi točno jednaki, bodovi zvača <strong>vise</strong> i dobiva ih pobjednik iduće ruke.</li>
         <li>Tko uzme sve štihove (štiglja) dobiva još 90 bodova.</li>
         <li>Pobjeđuje par koji prvi dođe do 1001 boda (može se igrati i do 501 ili 701).</li>
         <li>
@@ -87,6 +116,14 @@ function En() {
         Bela (Croatian Belot) uses 32 cards (7, 8, 9, 10, J, Q, K, A in four suits). Four players form two partnerships; partners
         sit opposite. Play goes counter-clockwise.
       </p>
+      <h2>The cards</h2>
+      <p>
+        Play with Hungarian-pattern cards (<em>mađarice</em>) or French cards, whichever you prefer (Menu → Settings → Card
+        deck). The Hungarian suits are <strong>hearts</strong>, <strong>bells</strong>, <strong>acorns</strong> and{' '}
+        <strong>leaves</strong> (for hearts, diamonds, clubs and spades), and the <strong>Unter</strong> (U) and{' '}
+        <strong>Ober</strong> (O) take the place of the Jack and Queen. The aces show the four seasons.
+      </p>
+      <Showcase />
       <h2>Deal and calling trump</h2>
       <p>
         Each player receives 6 cards, plus 2 face-down talon cards. Starting with the player after the dealer, each may call a

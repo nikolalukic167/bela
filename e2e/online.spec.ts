@@ -28,13 +28,13 @@ test('two friends at one table: create, share, join, play, drop out and come bac
 
   // Bruno closes his tab. After the grace period a bot plays for him and Ana sees him as away.
   await bruno.page.close();
-  await expect(ana.page.locator('.opponent').getByText('Bruno (odspojen)')).toBeVisible({ timeout: 150_000 });
+  await expect(ana.page.locator('.opponent').getByText('Bruno (bez veze)')).toBeVisible({ timeout: 150_000 });
 
   // He opens the link again and is back in his own seat.
   const back = await bruno.ctx.newPage();
   await back.goto(link);
   await expect(back.locator('.hand .hand-card').first()).toBeVisible();
-  await expect(ana.page.getByText('Bruno (odspojen)')).toHaveCount(0);
+  await expect(ana.page.getByText('Bruno (bez veze)')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
