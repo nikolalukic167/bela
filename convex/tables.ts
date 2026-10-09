@@ -573,9 +573,12 @@ export const watch = query({
     let view = null;
     let spectating = false;
     let deadline: number | null = null;
+    let seed: number | null = null;
     if (table.status !== 'lobby') {
       const row = await loadState(ctx, table._id);
       deadline = table.status === 'playing' ? (row.deadline ?? null) : null;
+      // Revealed only once the match is over, so anyone can replay and verify the deal (§9.1).
+      if (table.status === 'finished') seed = (row.state as BelaState).seed;
       // Admins may watch bot-only test tables (never real ones) from seat 0.
       spectating = mySeat < 0 && table.isTest && user.isAdmin === true;
       if (mySeat >= 0 || spectating) view = viewFor(row.state as BelaState, Math.max(mySeat, 0));
@@ -596,6 +599,8 @@ export const watch = query({
       rated: table.rated === true,
       /** When the invite stops admitting new players (null: never, tables from before expiry). */
       codeExpiresAt: table.codeExpiresAt ?? null,
+      /** The deck seed: null until the match is finished. With `options` and the action log it replays the game. */
+      seed,
     };
   },
 });

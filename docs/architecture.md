@@ -141,7 +141,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 ### 9.1 Game integrity
 - Server-side engine; clients get `view(seat)` only. A test asserts that, for every phase of a simulated game, JSON-serialised `view(s, seat)` contains none of the other seats' cards, talon cards, or the seed. This test is a release gate.
 - Seat identity comes from `getAuthUserId` + table lookup, never from a request argument.
-- Shuffle seed generated **on the server** with `crypto.getRandomValues`, stored in `tableState` only. Reveal it after the game ends (enables replay verification).
+- Shuffle seed generated **on the server** with `crypto.getRandomValues`, stored in `tableState` only. `watch` reveals it (`seed`) once the table is `finished`, never before: seed + `options` + the action log replay the match to its result (`replay` in `tableLogic.ts`; tested in `tests/convex/seedReveal.test.ts`, which also checks every phase of a live game for the seed).
 - Rate-limit actions per user per table (built: `ACT_LIMIT`, §7); reject actions arriving with a stale `version`.
 - Collusion: partners cannot be stopped from talking off-platform. Mitigate with emote-only chat, no live partner hand reveal, and flagging for statistically suspicious pairs later. Don't promise more than that.
 - Rating abuse: friendlies and bot games are unrated; rated games need distinct accounts; per-opponent daily rating-gain cap against win-trading; account-age/games-played gate for leaderboards (all built, §7).
