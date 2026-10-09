@@ -218,6 +218,10 @@ const hr = {
   'online.newCode': 'Nova šifra',
   'online.newCodeConfirm': 'Stara šifra i poveznica prestat će vrijediti. Igrači koji već sjede ostaju za stolom. Nastaviti?',
   'online.codeExpired': 'Šifra je istekla i više ne prima nove igrače. Napravi novu.',
+  'online.timer': 'Vrijeme za potez',
+  'online.timer.relaxed': 'Opušteno',
+  'online.timer.normal': 'Normalno',
+  'online.timer.quick': 'Brzo',
   'err.generic': 'Nešto je pošlo po zlu. Pokušaj ponovno.',
 };
 
@@ -439,6 +443,10 @@ const en: Record<keyof typeof hr, string> = {
   'online.newCode': 'New code',
   'online.newCodeConfirm': 'The old code and link will stop working. Players already seated stay at the table. Continue?',
   'online.codeExpired': 'The code has expired and no longer admits new players. Make a new one.',
+  'online.timer': 'Time per move',
+  'online.timer.relaxed': 'Relaxed',
+  'online.timer.normal': 'Normal',
+  'online.timer.quick': 'Quick',
   'err.generic': 'Something went wrong. Please try again.',
 };
 

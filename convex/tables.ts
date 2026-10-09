@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
-import { optionsValidator } from './schema';
+import { optionsValidator, timerProfileValidator } from './schema';
 import { requireUser } from './lib/auth';
 import {
   ACT_LIMIT,
@@ -13,7 +13,7 @@ import {
   LOOKUP_LIMIT,
   MAX_ACTIVE_TABLES_PER_USER,
   NEXT_HAND_DELAY_MS,
-  RECONNECT_GRACE_MS,
+  TIMER_PROFILES,
   STALE_TABLE_MS,
 } from './lib/config';
 import { TableError } from './lib/errors';
@@ -106,13 +106,15 @@ export async function uniqueCode(ctx: QueryCtx): Promise<string> {
 }
 
 const botLevelOf = (t: Doc<'tables'>): ServerBotLevel => (t.options.botLevel ?? 'medium') as ServerBotLevel;
+/** The table's clock (architecture §14.3); tables from before profiles run on 'normal'. */
+const timersOf = (t: Doc<'tables'>) => TIMER_PROFILES[t.timerProfile ?? 'normal'];
 
 /** Schedules the server's next step (bot move, trick collection) if there is one. */
 export async function scheduleNext(ctx: MutationCtx, table: Doc<'tables'>, row: Doc<'tableStates'>) {
   const m = moverOf(row.state as BelaState, table.seats as Seat[]);
   if (m.kind === 'none') {
     // Waiting on the humans: start the turn timer (a later move makes it a no-op).
-    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[]);
+    const timer = timeoutFor(row.state as BelaState, table.seats as Seat[], timersOf(table));
     await ctx.db.patch(row._id, { deadline: timer ? Date.now() + timer.ms : undefined });
     if (timer) await ctx.scheduler.runAfter(timer.ms, internal.tables.timeout, { tableId: table._id, version: row.version });
     return;
@@ -164,8 +166,8 @@ async function activeTableCount(ctx: QueryCtx, userId: Id<'users'>): Promise<num
 // ---------- lobby ----------
 
 export const create = mutation({
-  args: { options: optionsValidator, rated: v.optional(v.boolean()) },
-  handler: async (ctx, { options, rated }) => {
+  args: { options: optionsValidator, rated: v.optional(v.boolean()), timerProfile: v.optional(timerProfileValidator) },
+  handler: async (ctx, { options, rated, timerProfile }) => {
     const user = await requireUser(ctx);
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
     const seats = emptySeats();
@@ -176,6 +178,7 @@ export const create = mutation({
       hostId: user._id,
       options: { ...options, botLevel: options.botLevel ?? 'medium' },
       rated: rated === true,
+      timerProfile: timerProfile ?? 'normal',
       status: 'lobby',
       seats,
       isTest: false,
@@ -341,7 +344,7 @@ export const start = mutation({
     await ctx.db.patch(table._id, { seats, status: 'playing' });
     const rowId = await ctx.db.insert('tableStates', { tableId: table._id, state, version: 0 });
     const row = (await ctx.db.get(rowId))!;
-    for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table._id, s.userId);
+    for (const s of seats) if (s.kind === 'user') await touchPresence(ctx, table, s.userId);
     await scheduleNext(ctx, { ...table, seats, status: 'playing' } as Doc<'tables'>, row);
   },
 });
@@ -358,14 +361,15 @@ async function dropPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<
 }
 
 /** Records a heartbeat. A new row starts the presence-check chain for this seat. */
-async function touchPresence(ctx: MutationCtx, tableId: Id<'tables'>, userId: Id<'users'>) {
+async function touchPresence(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users'>) {
+  const tableId = table._id;
   const row = await presenceRow(ctx, tableId, userId);
   if (row) {
     await ctx.db.patch(row._id, { lastSeen: Date.now() });
     return;
   }
   const presenceId = await ctx.db.insert('presence', { tableId, userId, lastSeen: Date.now() });
-  await ctx.scheduler.runAfter(RECONNECT_GRACE_MS, internal.tables.checkPresence, { presenceId });
+  await ctx.scheduler.runAfter(timersOf(table).graceMs, internal.tables.checkPresence, { presenceId });
 }
 
 /**
@@ -386,7 +390,7 @@ export const heartbeat = mutation({
     } else if (seatOf(table.seats as Seat[], user._id) < 0) {
       return;
     }
-    await touchPresence(ctx, table._id, user._id);
+    await touchPresence(ctx, table, user._id);
   },
 });
 
@@ -405,7 +409,7 @@ export const checkPresence = internalMutation({
       await ctx.db.delete(row._id);
       return;
     }
-    const verdict = presenceCheck(row.lastSeen, Date.now(), RECONNECT_GRACE_MS);
+    const verdict = presenceCheck(row.lastSeen, Date.now(), timersOf(table).graceMs);
     if (!verdict.expired) {
       await ctx.scheduler.runAt(verdict.recheckAt, internal.tables.checkPresence, { presenceId });
       return;
@@ -466,6 +470,7 @@ export const rematch = mutation({
       isTest: table.isTest,
       speed: table.speed,
       rated: table.rated,
+      timerProfile: table.timerProfile,
       createdAt: Date.now(),
       codeExpiresAt: Date.now() + INVITE_TTL_MS,
     });
@@ -539,7 +544,7 @@ export const timeout = internalMutation({
     if (!table || table.status !== 'playing') return;
     const row = await loadState(ctx, tableId);
     if (row.version !== version) return;
-    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version);
+    const move = timeoutMove(row.state as BelaState, table.seats as Seat[], version, timersOf(table));
     if (move) await commit(ctx, table, row, belaGame.apply(row.state as BelaState, move.action), [move]);
   },
 });
@@ -601,6 +606,7 @@ export const watch = query({
       codeExpiresAt: table.codeExpiresAt ?? null,
       /** The deck seed: null until the match is finished. With `options` and the action log it replays the game. */
       seed,
+      timerProfile: table.timerProfile ?? 'normal',
     };
   },
 });

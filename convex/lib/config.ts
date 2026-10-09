@@ -13,6 +13,22 @@ export const HEARTBEAT_MS = 20_000;
 export const TURN_TIMEOUT_MS = 45_000;
 /** Nobody pressed "next" on the hand summary: the server deals on. */
 export const NEXT_HAND_TIMEOUT_MS = 30_000;
+/** A table's clock: reconnect grace, time per move, time on the hand summary. */
+export interface TimerProfile {
+  graceMs: number;
+  turnMs: number;
+  nextHandMs: number;
+}
+/**
+ * Picked by the host at creation and frozen with the table (architecture §14.3). "normal" is the
+ * original 90/45/30 s. Which profile each mode (target, rated) should default to is an open decision.
+ */
+export const TIMER_PROFILES = {
+  relaxed: { graceMs: 180_000, turnMs: 90_000, nextHandMs: 60_000 },
+  normal: { graceMs: RECONNECT_GRACE_MS, turnMs: TURN_TIMEOUT_MS, nextHandMs: NEXT_HAND_TIMEOUT_MS },
+  quick: { graceMs: 45_000, turnMs: 20_000, nextHandMs: 15_000 },
+} satisfies Record<string, TimerProfile>;
+export type TimerProfileName = keyof typeof TIMER_PROFILES;
 /** Lobbies never started, and tables everyone walked away from, are deleted after this. */
 export const STALE_TABLE_MS = 24 * 60 * 60 * 1000;
 /** Rated games a player needs before appearing on the public leaderboard (architecture §9.1). */

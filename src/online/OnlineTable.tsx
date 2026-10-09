@@ -3,7 +3,7 @@ import { ConvexError } from 'convex/values';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
-import { HEARTBEAT_MS } from '../../convex/lib/config';
+import { HEARTBEAT_MS, TIMER_PROFILES } from '../../convex/lib/config';
 import type { BelaAction } from '../games/bela/state';
 import { TableScreen } from '../games/bela/ui/BelaTable';
 import { useI18n } from '../i18n/i18n';
@@ -210,6 +210,9 @@ function TableLobby({ data, code, error, guard }: { data: Watched; code: string;
               <span className="badge badge-ghost">{t(`online.status.${data.status}`)}</span>
               {data.isTest && <span className="badge badge-warning">test</span>}
               {data.rated && <span className="badge badge-primary">{t('online.rated')}</span>}
+              <span className="badge badge-ghost" title={t('online.timer')}>
+                {t(`online.timer.${data.timerProfile}`)} · {TIMER_PROFILES[data.timerProfile].turnMs / 1000} s
+              </span>
             </div>
             {lobby && (
               <>

@@ -24,6 +24,8 @@ export const optionsValidator = v.object({
   botLevel: v.optional(v.union(v.literal('easy'), v.literal('medium'), v.literal('hard'))),
 });
 
+export const timerProfileValidator = v.union(v.literal('relaxed'), v.literal('normal'), v.literal('quick'));
+
 export default defineSchema({
   ...authTables,
 
@@ -69,6 +71,8 @@ export default defineSchema({
     rated: v.optional(v.boolean()),
     /** The invite code admits new players until then (§9.3). Absent on tables from before codes expired. */
     codeExpiresAt: v.optional(v.number()),
+    /** Clock for this table (lib/config TIMER_PROFILES), set at creation; absent means 'normal'. */
+    timerProfile: v.optional(timerProfileValidator),
   })
     .index('by_code', ['code'])
     .index('by_status', ['status', 'createdAt'])

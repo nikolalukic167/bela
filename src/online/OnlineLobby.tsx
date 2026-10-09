@@ -2,7 +2,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
-import { CODE_LENGTH } from '../../convex/lib/config';
+import { CODE_LENGTH, TIMER_PROFILES, type TimerProfileName } from '../../convex/lib/config';
 import { belaGame } from '../games/bela/game';
 import { NewGameDialog } from '../games/bela/ui/NewGameDialog';
 import type { BelaOptions } from '../games/bela/state';
@@ -14,6 +14,7 @@ import { OnlineGate } from './OnlineGate';
 /** Bot levels the server can afford inside a mutation (expert is offline-only). */
 const ONLINE_LEVELS = ['easy', 'medium', 'hard'] as const;
 const DEFAULTS: BelaOptions = { ...belaGame.defaultOptions, target: 501 };
+const TIMER_CHOICES: TimerProfileName[] = ['relaxed', 'normal', 'quick'];
 
 export function OnlineLobbyPage() {
   return (
@@ -31,6 +32,7 @@ function OnlineLobby() {
   const join = useMutation(api.tables.join);
   const [creating, setCreating] = useState(false);
   const [rated, setRated] = useState(false);
+  const [timerProfile, setTimerProfile] = useState<TimerProfileName>('normal');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +43,7 @@ function OnlineLobby() {
     setError(null);
     try {
       const botLevel = o.botLevel === 'expert' ? 'hard' : o.botLevel;
-      const created = await create({ options: { ...o, botLevel }, rated });
+      const created = await create({ options: { ...o, botLevel }, rated, timerProfile });
       navigate(`/t/${created}`);
     } catch (e) {
       fail(e);
@@ -77,6 +79,16 @@ function OnlineLobby() {
               <label className="label cursor-pointer gap-2">
                 <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={rated} onChange={(e) => setRated(e.target.checked)} />
                 {t('online.rated')}
+              </label>
+              <label className="fieldset py-0">
+                <span className="fieldset-legend">{t('online.timer')}</span>
+                <select className="select select-sm" value={timerProfile} onChange={(e) => setTimerProfile(e.target.value as TimerProfileName)}>
+                  {TIMER_CHOICES.map((p) => (
+                    <option key={p} value={p}>
+                      {t(`online.timer.${p}`)} · {TIMER_PROFILES[p].turnMs / 1000} s
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="card-actions">
                 <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
