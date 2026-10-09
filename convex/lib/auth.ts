@@ -10,7 +10,8 @@ export async function requireUser(ctx: Ctx): Promise<Doc<'users'>> {
   const id = await getAuthUserId(ctx);
   if (id === null) throw new TableError('UNAUTHENTICATED');
   const user = await ctx.db.get(id);
-  if (!user) throw new TableError('UNAUTHENTICATED');
+  // A deleted account's last token stays valid until it expires; it must not act any more.
+  if (!user || user.deletedAt !== undefined) throw new TableError('UNAUTHENTICATED');
   return user;
 }
 
@@ -20,14 +21,4 @@ export async function requireAdmin(ctx: Ctx): Promise<Doc<'users'>> {
   const user = id === null ? null : await ctx.db.get(id);
   if (!user?.isAdmin) throw new TableError('NOT_FOUND');
   return user;
-}
-
-/** 2–24 chars, no control characters. Used for every user-chosen name. */
-export function cleanName(raw: unknown, min: number, max: number): string {
-  const name = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
-  // eslint-disable-next-line no-control-regex
-  if (name.length < min || name.length > max || /[\u0000-\u001f\u007f]/.test(name)) {
-    throw new TableError('INVALID_INPUT');
-  }
-  return name;
 }

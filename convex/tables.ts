@@ -50,6 +50,7 @@ import { viewFor } from '../src/games/bela/view';
 import { recordGame } from './ratings';
 import { ratedBlocker } from './lib/ratingLogic';
 import { belaGame } from '../src/games/bela/game';
+import { blockedBetween } from './lib/blocks';
 
 const actionValidator = v.union(
   v.object({ type: v.literal('pass') }),
@@ -225,6 +226,9 @@ export const join = mutation({
     const free = firstEmpty(seats);
     if (free < 0) throw new TableError('TABLE_FULL');
     if ((await activeTableCount(ctx, user._id)) >= MAX_ACTIVE_TABLES_PER_USER) throw new TableError('RATE_LIMITED');
+    // Blocks work both ways (architecture §9.4): neither side sits down with the other.
+    const seated = seats.flatMap((s) => (s.kind === 'user' ? [s.userId] : s.kind === 'bot' && s.standInFor ? [s.standInFor] : []));
+    if (await blockedBetween(ctx, user._id, seated)) throw new TableError('BLOCKED');
     seats[free] = { kind: 'user', userId: user._id, name: user.name ?? 'Igrač' };
     await ctx.db.patch(table._id, { seats });
     await ctx.db.insert('memberships', { userId: user._id, tableId: table._id });
@@ -312,34 +316,42 @@ export const leave = mutation({
     const user = await requireUser(ctx);
     const table = await findTable(ctx, code, user);
     if (!table) throw new TableError('NOT_FOUND');
-    const seats = table.seats as Seat[];
-    const seat = ownSeat(seats, user._id);
-    if (seat < 0) return;
-    await dropMembership(ctx, user._id, table._id);
-    await dropPresence(ctx, table._id, user._id);
-    if (table.status === 'finished') return;
-    if (table.status === 'playing' && table.rated) {
-      await abandon(ctx, table, user._id);
-      return;
-    }
-    // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
-    seats[seat] =
-      table.status === 'lobby'
-        ? { kind: 'empty' }
-        : { kind: 'bot', name: seats[seat].kind === 'empty' ? 'Bot' : seats[seat].name, level: botLevelOf(table) };
-    if (humanCount(seats) === 0) {
-      await deleteTable(ctx, table._id);
-      return;
-    }
-    const hostId =
-      table.hostId === user._id ? ((seats.find((s) => s.kind === 'user') as Extract<Seat, { kind: 'user' }>).userId) : table.hostId;
-    await ctx.db.patch(table._id, { seats, hostId });
-    if (table.status === 'playing') {
-      const row = await loadState(ctx, table._id);
-      await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, row);
-    }
+    await leaveTable(ctx, table, user._id);
   },
 });
+
+/**
+ * Takes a player off a table: a lobby seat is freed, a rated game is abandoned, and in a
+ * friendly game a bot keeps the seat for good, named `botName` (default: the player's name).
+ */
+export async function leaveTable(ctx: MutationCtx, table: Doc<'tables'>, userId: Id<'users'>, botName?: string) {
+  const seats = table.seats as Seat[];
+  const seat = ownSeat(seats, userId);
+  if (seat < 0) return;
+  await dropMembership(ctx, userId, table._id);
+  await dropPresence(ctx, table._id, userId);
+  if (table.status === 'finished') return;
+  if (table.status === 'playing' && table.rated) {
+    await abandon(ctx, table, userId);
+    return;
+  }
+  // In a running game a bot keeps the seat for good, also when it was standing in for an away player.
+  seats[seat] =
+    table.status === 'lobby'
+      ? { kind: 'empty' }
+      : { kind: 'bot', name: botName ?? (seats[seat].kind === 'empty' ? 'Bot' : seats[seat].name), level: botLevelOf(table) };
+  if (humanCount(seats) === 0) {
+    await deleteTable(ctx, table._id);
+    return;
+  }
+  const hostId =
+    table.hostId === userId ? ((seats.find((s) => s.kind === 'user') as Extract<Seat, { kind: 'user' }>).userId) : table.hostId;
+  await ctx.db.patch(table._id, { seats, hostId });
+  if (table.status === 'playing') {
+    const row = await loadState(ctx, table._id);
+    await scheduleNext(ctx, { ...table, seats } as Doc<'tables'>, row);
+  }
+}
 
 export const start = mutation({
   args: { code: v.string() },
@@ -475,7 +487,10 @@ export const rematch = mutation({
     const free = new Set<Id<'users'>>([user._id]);
     for (const s of table.seats as Seat[]) {
       const id = s.kind === 'user' ? s.userId : s.kind === 'bot' ? s.standInFor : undefined;
-      if (id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER) free.add(id);
+      // Nobody blocked with the player who asks is reseated (architecture §9.4).
+      if (id && id !== user._id && (await activeTableCount(ctx, id)) < MAX_ACTIVE_TABLES_PER_USER && !(await blockedBetween(ctx, user._id, [id]))) {
+        free.add(id);
+      }
     }
     const seats = rematchSeats(table.seats as Seat[], (id) => free.has(id));
     const next = await uniqueCode(ctx);
