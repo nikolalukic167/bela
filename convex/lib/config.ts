@@ -6,13 +6,13 @@ export const NEXT_HAND_DELAY_MS = 4000;
 /** 'fast' tables play this many moves per scheduled call. */
 export const FAST_BATCH = 150;
 /** How long a dropped player's seat is held before a bot stands in (architecture §7). */
-export const RECONNECT_GRACE_MS = 90_000;
+export const RECONNECT_GRACE_MS = 60_000;
 /** Open table pages report in this often; a few missed beats fit inside the grace period. */
-export const HEARTBEAT_MS = 20_000;
+export const HEARTBEAT_MS = 15_000;
 /** A seated human who doesn't move in time gets a move played for them (architecture §7). */
-export const TURN_TIMEOUT_MS = 45_000;
+export const TURN_TIMEOUT_MS = 30_000;
 /** Nobody pressed "next" on the hand summary: the server deals on. */
-export const NEXT_HAND_TIMEOUT_MS = 30_000;
+export const NEXT_HAND_TIMEOUT_MS = 20_000;
 /** A table's clock: reconnect grace, time per move, time on the hand summary. */
 export interface TimerProfile {
   graceMs: number;
@@ -21,12 +21,13 @@ export interface TimerProfile {
 }
 /**
  * Picked by the host at creation and frozen with the table (architecture §14.3). "normal" is the
- * original 90/45/30 s. Which profile each mode (target, rated) should default to is an open decision.
+ * default for every table (decided in §14; the first version used 90/45/30 s). Even the quick grace
+ * period outlasts two heartbeats.
  */
 export const TIMER_PROFILES = {
-  relaxed: { graceMs: 180_000, turnMs: 90_000, nextHandMs: 60_000 },
+  relaxed: { graceMs: 120_000, turnMs: 60_000, nextHandMs: 40_000 },
   normal: { graceMs: RECONNECT_GRACE_MS, turnMs: TURN_TIMEOUT_MS, nextHandMs: NEXT_HAND_TIMEOUT_MS },
-  quick: { graceMs: 45_000, turnMs: 20_000, nextHandMs: 15_000 },
+  quick: { graceMs: 30_000, turnMs: 15_000, nextHandMs: 10_000 },
 } satisfies Record<string, TimerProfile>;
 export type TimerProfileName = keyof typeof TIMER_PROFILES;
 /** Lobbies never started, and tables everyone walked away from, are deleted after this. */

@@ -73,9 +73,9 @@ test('a quick table: the host picks the timer profile, and the move countdown st
   await ana.page.getByLabel('Vrijeme za potez').selectOption('quick');
   await ana.page.getByRole('button', { name: 'Novi stol' }).click();
   await ana.page.getByRole('dialog').getByRole('button', { name: 'Novi stol' }).click();
-  await expect(ana.page.getByText('Brzo · 20 s')).toBeVisible();
+  await expect(ana.page.getByText('Brzo · 15 s')).toBeVisible();
   await ana.page.getByRole('button', { name: 'Pokreni igru' }).click();
-  // 20 s per move is inside the last-20-seconds countdown, so it shows right away (normal: after 25 s).
+  // 15 s per move is inside the last-20-seconds countdown, so it shows right away (normal: after 10 s).
   await expect(ana.page.getByRole('timer')).toBeVisible({ timeout: 5000 });
   expect(errors).toEqual([]);
 });
