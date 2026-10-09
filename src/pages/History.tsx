@@ -1,7 +1,8 @@
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAccount } from '../account/account';
-import { loadLocalHistory, mergeHistory, summarize, type HistoryEntry } from '../games/bela/history';
+import { mergeHistory, summarize, type HistoryEntry } from '../games/bela/history';
+import { loadLocalHistory } from '../games/bela/ui/localHistory';
 import { useI18n } from '../i18n/i18n';
 import { AppShell } from '../ui/AppShell';
 
