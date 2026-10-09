@@ -11,6 +11,8 @@ npm install
 npm run dev        # http://localhost:5173/bela/
 npm test           # engine, bots, and the server functions (convex-test)
 npm run typecheck  # app + convex/ type-check
+npm run lint       # ESLint, incl. the layer rule (architecture §4)
+npm run e2e        # Playwright against a throwaway local Convex backend (no account needed)
 npm run build      # type-check + production build into dist/
 ```
 
@@ -27,6 +29,8 @@ src/account/       sign-in (guest, username, Google) and account context
 src/admin/         hidden admin panel (test data, bot matches)
 convex/            server: auth, tables, admin; lib/tableLogic.ts is the pure core
 tests/             server tests: tests/server (pure), tests/convex (convex-test)
+e2e/               Playwright browser tests (run via scripts/e2e.sh)
+config/            build config (Content-Security-Policy)
 src/i18n/          Croatian / English strings
 docs/rules/bela.md exact rules the engine implements
 docs/bots/         bot levels (random → heuristic → tracking → PIMC → ISMCTS), experiments, report

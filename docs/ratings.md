@@ -13,13 +13,13 @@ It uses [OpenSkill](https://www.npmjs.com/package/openskill) (Weng-Lin, Plackett
 Matches are the source of truth. Ratings are derived from them.
 - `MatchRecord`: id, playedAt, teams, final scores, winner, `rated`, optional `abandonedBy`. Records are append-only.
 - `replay(matches)` rebuilds every rating from the history and also returns a per-player history (for progress graphs), skipped matches with reasons, and pre-match predictions. If the algorithm or config changes, run `replay` again.
-- When ratings are online, this runs **on the server only**. Clients only display results.
+- Online, this runs **on the server only** (`convex/ratings.ts`): each finished rated match is rated incrementally with `rateMatch` in the same mutation that records the game, and `replay` can rebuild everything from the `games` table. Clients only display results.
 
 ## Rules
 | Rule | Default | Why |
 |---|---|---|
 | `rated: false` | - | Casual games count for partner stats but not ratings |
-| `abandonedBy` | - | The leaver's team loses |
+| `abandonedBy` | - | The leaver's team loses. Online, only the leaver's rating takes the loss; their partner's is left unchanged |
 | Quartet cap | 3 rated matches per 24 h for the same four players (any seating) | Blunts win-trading between friends |
 | Inactivity | after 30 idle days, sigma grows by 0.1/day in quadrature, capped at a new player's | Returning players re-adjust quickly |
 

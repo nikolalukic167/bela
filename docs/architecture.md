@@ -16,8 +16,8 @@ How Karte/Bela is built, in what order, and the rules the code must follow. It e
 | # | Phase | Delivers | Depends on | Status |
 |---|---|---|---|---|
 | 1 | **Core game** | Accurate rules and scoring, bots, local play, i18n (hr/en), tutorial & legal-card hints | none | mostly done (`src/games/bela`) |
-| 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **in progress**: guests/username accounts, private tables, server-side bots, admin test tools, reconnect with stand-in bots built (see §15); turn timers, rematch, rated play and e2e still open |
-| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | |
+| 2 | **Accounts & private tables** | Sign-in without Google (guest name or username + password) and with Google, create table by link/code, seats, bots fill empty seats, reconnect, table options shown before joining | 1, Convex | **done** (see §15): accounts, private tables, server-side bots, admin tools, reconnect, turn timers, rematch, cleanup, e2e |
+| 3 | **Ratings & leaderboard** | OpenSkill per player, `rating_history`, global board, rating graph, personal stats | 2 | **mostly done**: rated tables, `games`, ratings + history, public leaderboard, own rating graph; personal stats page open |
 | 4 | **Social** | Friends, fixed pairs (own rating), head-to-head, regional boards (country/city/club field on profile) | 3 | |
 | 5 | **Competitive** | Seasons/leagues, tournaments (round-robin, brackets), clubs, replays, achievements | 3, 4 | |
 | 6 | **Extras** | Cosmetics, premium analytics, sponsored tournaments, other games (Briškula, Trešeta), physical-table scorekeeper | 3 | |
@@ -68,7 +68,7 @@ tests/
 docs/              architecture, ADRs, rules/<game>.md (spec the engine is tested against)
 ```
 
-Dependency rule (enforce with an ESLint `no-restricted-imports` config):
+Dependency rule (enforced by `no-restricted-imports` in `eslint.config.js`; `npm run lint`):
 
 ```
 core  ←  games/*  ←  ui, pages          convex/ may import core + games + ratings
@@ -90,7 +90,7 @@ core  ←  games/*  ←  ui, pages          convex/ may import core + games + ra
 
 ## 6. Data model (Convex)
 
-Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are the first six rows; the rest is the plan.
+Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far: everything down to `ratingHistory`; the rest is the plan.
 
 | Table | Key fields | Notes |
 |---|---|---|
@@ -100,9 +100,9 @@ Defined in `convex/schema.ts`; every field validated by `v.*`. Built so far are 
 | `actions` | `tableId`, `seq`, `seat`, `action` | Append-only; `seq` = version before the action. Seed + options + actions rebuild a game. |
 | `memberships` | `userId`, `tableId` | Index for "my tables" and the per-user table limit. |
 | `presence` | `tableId`, `userId`, `lastSeen` | Last heartbeat per human at a running table. Separate from `tables` so heartbeats don't re-run every `watch` query. |
-| `games` | `tableId`, `players`, `result`, `rated`, `endedAt`, `endReason` (normal/abandoned) | One row per finished match. Planned (phase 3). |
-| `ratings` | `userId`, `scope` (`solo`\|`pair:<id>`), `mu`, `sigma`, `games` | OpenSkill (mu/sigma), not a single Elo number. Planned. |
-| `rating_history` | `ratingId`, `gameId`, `mu`, `sigma`, `at` | Feeds the rating graph. Planned. |
+| `games` | `tableId`, `players` (user per seat, null for bots), `scores`, `winner`, `rated`, `endReason` (normal/abandoned), `abandonedBy`, `quartetKey`, `endedAt` | One row per finished non-test match, written with the rating update. |
+| `ratings` | `userId`, `mu`, `sigma`, `gamesPlayed`, `lastPlayedAt`, `display` (mu − 3σ, indexed for the board) | OpenSkill, not a single Elo number. Solo scope only; pair ratings come with phase 4. |
+| `ratingHistory` | `userId`, `gameId`, `mu`, `sigma`, `display`, `delta`, `at` | One point per player per rated game; feeds the rating graph. |
 | `pairs` | `userA`, `userB` (ordered), `status`, rating via `ratings` | Both must accept. Planned. |
 | `friendships`, `invites` | pair of users + status; code, expiry, uses | Invites expire and are single-purpose. Planned. |
 | `leagues`, `tournaments`, `clubs` | later phases | Added with their phase, not before. |
@@ -116,8 +116,11 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - **Act flow** (`tables.act`): resolve caller → seat from the table (never from args) → check it is that seat's turn → check `action ∈ legalActions` → `apply` → append to `actions` → bump `version` (optimistic concurrency; retry on conflict) → schedule next system step.
 - **Scheduled functions** drive everything time-based: bot moves (with a small human-like delay), trick collection, turn timers, reconnect grace expiry, abandoned-table cleanup. All idempotent and version-checked: a stale timer is a no-op.
 - **Bots** decide from `view(seat)` only, through the same `bot(v, rng)` used offline. Online tables offer easy / medium / hard: expert (PIMC, ~700 ms per move) would exceed Convex's mutation time limit, so it stays offline-only. A whole hard match costs about 75 ms of bot compute, so "fast" test tables play many moves per call. They are marked `{bot: true}` in seats and are excluded from rating updates (and make the game unrated).
-- **Reconnect:** an open table page sends `tables.heartbeat` every 20 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for 90 s (`RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. Still planned: per-table grace, and for rated games ending as `abandoned` with the loss on the absent player.
-- **Ratings:** on game end, one mutation writes `games`, updates `ratings` and appends `rating_history`, atomically. Only rated games with four humans (or the pair rule) qualify. Rating maths lives in `src/ratings/` as pure functions with tests.
+- **Reconnect:** an open table page sends `tables.heartbeat` every 20 s (`HEARTBEAT_MS`). A disconnected seat keeps its place for 90 s (`RECONNECT_GRACE_MS`). One scheduled `checkPresence` per seat re-arms itself once per grace period (not per heartbeat, to save function calls); on expiry a bot **stands in** under the player's name (`seat.standInFor`) and the friendly game continues. The player's first heartbeat on return takes the seat back. If every human is away the table waits instead of playing on. Leaving makes the bot permanent. In a **rated** game there is no stand-in: leaving or dropping past the grace period ends the match as `abandoned`, the leaver's team loses, and only the leaver (not their partner) takes the rating loss. Still planned: per-table grace.
+- **Turn timers:** while the table waits on a human, `scheduleNext` arms `tables.timeout` (version-checked). 45 s per move (`TURN_TIMEOUT_MS`), then the server plays a medium bot's move for that seat, which they keep; an unclicked hand summary deals on after 30 s (`NEXT_HAND_TIMEOUT_MS`). `watch` returns the `deadline`; the page counts down the last 20 s.
+- **Rematch:** `tables.rematch` on a finished table opens one lobby with the same seats and options (away players seated in person again); the old table stores `rematchCode`, so everyone lands at the same table.
+- **Cleanup:** `crons.ts` runs `tables.cleanup` daily: deletes lobbies never started within 24 h and running tables every human has been away from for 24 h (`STALE_TABLE_MS`). Finished tables are history and stay.
+- **Ratings:** a table is rated or not from creation (`tables.create({ rated })`). Rated tables need four different account holders: no bots, no guests (`ratedBlocker`). On game end the same mutation writes `games`, updates `ratings` and appends `ratingHistory` (`convex/ratings.ts` → pure `convex/lib/ratingLogic.ts` → `src/ratings/`). The quartet cap (3 rated games per 24 h for the same four) turns extra games unrated. `ratings.leaderboard` is public and lists players with 10+ rated matches by name only.
 - **Errors:** typed `ConvexError` codes (`NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `TABLE_FULL`, `NOT_FOUND`, `RATE_LIMITED`); the client maps them to translated messages. Never leak internal state in an error.
 
 ## 8. Client design
@@ -162,7 +165,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 - No third-party trackers in v1. If analytics are added: cookieless, aggregate, disclosed in a privacy page.
 
 ### 9.5 Web & supply chain
-- CSP header via `<meta>` (GitHub Pages can't set headers): `default-src 'self'; connect-src 'self' https://*.convex.cloud wss://*.convex.cloud; img-src 'self' data: https://lh3.googleusercontent.com`; no inline scripts.
+- CSP via `<meta>` (GitHub Pages can't set headers), added to production builds by `config/csp.ts`: `script-src 'self'` (no inline scripts, no eval), `connect-src` only this build's own Convex deployment (https + wss), Google Fonts and Google avatars allowed, `object-src 'none'`. Not in dev, where Vite injects an inline script.
 - Dependabot + `npm audit` in CI; pin via `package-lock.json`; review new dependencies. GitHub Actions pinned to commit SHAs and run with minimal `permissions:`.
 - Secret scanning enabled on the repo; `.env*` gitignored.
 - Production and dev Convex deployments are separate; the deploy key can only deploy.
@@ -193,7 +196,7 @@ Indexing: every query path has an index (`by_code`, `by_user`, `by_table`, `by_t
 | E2E | Playwright | Two browser contexts at one table: create by link, join, play a hand, reconnect mid-game. |
 | UI | Vitest + Testing Library (sparingly) | Language switch, legal-card hints, accessibility smoke. |
 
-CI (`.github/workflows`): typecheck → lint → unit tests → build → (on `main`) deploy Pages + Convex. A red check blocks merge.
+CI: `ci.yml` on every PR runs typecheck → lint → unit/server tests → build → `npm audit` (prod, high), and an **e2e** job: `npm run e2e` starts a throwaway local Convex backend (`CONVEX_AGENT_MODE=anonymous`, no account or secrets), builds against it and runs Playwright (`e2e/`): two browser contexts create, join and play a table and reconnect; local play on desktop and phone; console errors (incl. CSP violations) fail the test. `deploy.yml` (on `main`) lints, tests and deploys Pages + Convex. Actions are pinned to commit SHAs; Dependabot updates npm and actions weekly. A red check blocks merge.
 
 ## 12. Observability & operations
 
@@ -213,7 +216,7 @@ CI (`.github/workflows`): typecheck → lint → unit tests → build → (on `m
 
 1. Display names: guests and username accounts pick their own (2–24 chars, not unique; `users.rename` exists, no UI yet). Google name by default for Google users? Uniqueness rules? Offensive-name filter?
 2. Do signed-in local games against bots count for personal stats (unrated)?
-3. Reconnect grace default and turn-timer defaults per mode (quick vs long game).
+3. Reconnect grace and turn-timer defaults per mode (quick vs long game). Current defaults: 90 s grace, 45 s per move, 30 s on the hand summary, same for every table.
 4. Pair rating: separate `pair` rating only, or also feed both members' solo ratings?
 5. Region model: free text vs a fixed list of cities/clubs (affects leaderboards and moderation).
 6. When (if ever) to open a public lobby; minimum concurrent-player threshold.
@@ -237,4 +240,4 @@ Decided in [adr/0001-guest-and-username-accounts.md](adr/0001-guest-and-username
 
 **Reconnect** is built (§7): heartbeats, a 90 s grace period, stand-in bots, reclaim on return, and a table that waits when everyone is away. Pure rules in `tableLogic.ts` (`presenceCheck`, `standIn`, `reclaimSeat`), tested in `tests/server/presence.test.ts` and `tests/convex/reconnect.test.ts`.
 
-**Not yet built (phase 2 remainder):** turn timers, rematch, rated play, Playwright e2e with two browser contexts, cleanup of tables abandoned by everyone.
+**Turn timers, rematch, cleanup, rated play and e2e** are built too (§7, §11). Still open: per-table grace and timer settings, personal stats page, action-log compaction for old friendlies.
